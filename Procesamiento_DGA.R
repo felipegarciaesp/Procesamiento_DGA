@@ -111,7 +111,8 @@ procesar_pp <- function(file_xlsx) {
     anios   <- as.integer(format(fechas[validos], "%Y"))
     meses   <- as.integer(format(fechas[validos], "%m"))
 
-    anios_unicos <- sort(unique(as.integer(format(fechas[!is.na(fechas)], "%Y"))))
+    # Vector continuo de años: desde el primer hasta el ultimo año con datos
+    anios_unicos <- seq(min(anios), max(anios))
 
     conteo <- table(factor(anios, levels = anios_unicos),
                     factor(meses, levels = 1:12))
@@ -137,6 +138,19 @@ procesar_pp <- function(file_xlsx) {
                                     style = c("#F8696B", "#FFEB84", "#006400"),
                                     rule = c(0, 15, 31),
                                     type = "colourScale")
+
+    # --- Cantidad de meses con información (Y1:Z...) ---
+    tabla_meses <- data.frame(YEAR  = tabla_conteo$YEAR,
+                              MESES = rowSums(tabla_conteo[, 2:13] > 0))
+
+    openxlsx::writeData(wb, hoja, "Cantidad de meses con información",
+                        startCol = 25, startRow = 1)
+    openxlsx::mergeCells(wb, hoja, cols = 25:26, rows = 1)
+    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 25)
+
+    openxlsx::writeData(wb, hoja, tabla_meses, startCol = 25, startRow = 2)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 25:26, gridExpand = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 25:26, widths = c(8, 8))
   }
 
   openxlsx::saveWorkbook(wb, file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)

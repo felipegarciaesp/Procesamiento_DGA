@@ -1,0 +1,13 @@
+# Planillas Excel en Inputs y Outputs
+Inputs/*.xlsx
+Inputs/*.xls
+Outputs/*.xlsx
+Outputs/*.xls
+
+# Archivos temporales de Excel
+~$*
+
+# Historial y archivos de sesión de R
+.Rhistory
+.RData
+.Rproj.user/
