@@ -151,6 +151,92 @@ procesar_pp <- function(file_xlsx) {
     openxlsx::writeData(wb, hoja, tabla_meses, startCol = 25, startRow = 2)
     openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 25:26, gridExpand = TRUE)
     openxlsx::setColWidths(wb, hoja, cols = 25:26, widths = c(8, 8))
+
+    # --- Precipitacion mensual (mm) - Año calendario (AB1:AN...) ---
+    suma_mensual <- tapply(serie$Precipitación_diaria[validos],
+                           list(factor(anios, levels = anios_unicos),
+                                factor(meses, levels = 1:12)),
+                           sum)
+
+    tabla_pp <- data.frame(YEAR = anios_unicos,
+                           matrix(as.numeric(suma_mensual),
+                                  nrow = length(anios_unicos), ncol = 12))
+    names(tabla_pp) <- c("YEAR", "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+                         "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
+
+    openxlsx::writeData(wb, hoja, "Precipitacion mensual (mm) - Año calendario",
+                        startCol = 28, startRow = 1)
+    openxlsx::mergeCells(wb, hoja, cols = 28:40, rows = 1)
+    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 28)
+
+    openxlsx::writeData(wb, hoja, tabla_pp, startCol = 28, startRow = 2)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 28:40, gridExpand = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 28:40, widths = c(8, rep(8, 12)))
+
+    # Meses sin datos: se escribe la formula =NA() (muestra #N/A en cualquier idioma de Excel)
+    pos_na <- which(is.na(tabla_pp[, 2:13]), arr.ind = TRUE)
+    if (nrow(pos_na) > 0) {
+      for (k in seq_len(nrow(pos_na))) {
+        openxlsx::writeFormula(wb, hoja, x = "NA()",
+                               startCol = 28 + pos_na[k, 2],
+                               startRow = 2 + pos_na[k, 1])
+      }
+    }
+
+    # --- Pp mensual (mm) - Año calendario, en vector (AP1:AS...) ---
+    n_anios <- length(anios_unicos)
+    vec_year <- rep(anios_unicos, each = 12)
+    vec_mes  <- rep(1:12, times = n_anios)
+
+    tabla_vec <- data.frame(FECHA     = as.Date(sprintf("%d-%02d-01", vec_year, vec_mes)),
+                            MES       = vec_mes,
+                            YEAR      = vec_year,
+                            `Pp (mm)` = as.numeric(t(as.matrix(tabla_pp[, 2:13]))),
+                            check.names = FALSE)
+
+    openxlsx::writeData(wb, hoja, "Pp mensual (mm) - Año calendario",
+                        startCol = 42, startRow = 1)
+    openxlsx::mergeCells(wb, hoja, cols = 42:45, rows = 1)
+    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 42)
+
+    openxlsx::writeData(wb, hoja, tabla_vec, startCol = 42, startRow = 2)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 42:45, gridExpand = TRUE)
+    openxlsx::addStyle(wb, hoja, estilo_fecha, rows = 3:(nrow(tabla_vec) + 2),
+                       cols = 42, gridExpand = TRUE, stack = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 42:45, widths = c(12, 6, 8, 10))
+
+    # Meses sin datos: formula =NA() tambien en el vector
+    filas_na <- which(is.na(tabla_vec$`Pp (mm)`))
+    for (r in filas_na) {
+      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 45, startRow = 2 + r)
+    }
+
+    # --- Precipitacion promedio mensual (mm) - Año calendario (AU1:AV...) ---
+    nombres_meses <- c("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+                       "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
+
+    promedio_mensual <- sapply(2:13, function(j) {
+      v <- tabla_pp[[j]]
+      if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
+    })
+
+    tabla_prom <- data.frame(MES = nombres_meses,
+                             `Pp promedio (mm)` = promedio_mensual,
+                             check.names = FALSE)
+
+    openxlsx::writeData(wb, hoja, "Precipitacion promedio mensual (mm) - Año calendario",
+                        startCol = 47, startRow = 1)
+    openxlsx::mergeCells(wb, hoja, cols = 47:48, rows = 1)
+    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 47)
+
+    openxlsx::writeData(wb, hoja, tabla_prom, startCol = 47, startRow = 2)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 47:48, gridExpand = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 47:48, widths = c(8, 16))
+
+    # Meses sin ningun dato en todos los años: formula =NA()
+    for (m in which(is.na(promedio_mensual))) {
+      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 48, startRow = 2 + m)
+    }
   }
 
   openxlsx::saveWorkbook(wb, file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
