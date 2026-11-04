@@ -239,12 +239,21 @@ procesar_pp <- function(file_xlsx) {
 
     tabla_anual <- data.frame(YEAR = anios_unicos,
                               `Pp anual (mm)` = as.numeric(pp_anual),
-                              `Pp promedio anual (mm)` = c(pp_prom_anual,
-                                                           rep(NA_real_, length(anios_unicos) - 1)),
                               check.names = FALSE)
 
     escribir_titulo(wb, hoja, "Pp anual y promedio anual (mm) - Año calendario", 50, 52)
     escribir_tabla(wb, hoja, tabla_anual, 50)
+
+    # Pp promedio anual (mm): encabezado y un unico valor en la primera fila de datos
+    wb$add_data(sheet = hoja, x = "Pp promedio anual (mm)", start_col = 52, start_row = 2,
+                col_names = FALSE)
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = 2, cols = 52), bold = TRUE)
+    if (is.na(pp_prom_anual)) {
+      escribir_na(wb, hoja, 3, 52)
+    } else {
+      wb$add_data(sheet = hoja, x = pp_prom_anual, start_col = 52, start_row = 3,
+                  col_names = FALSE)
+    }
     wb$set_col_widths(sheet = hoja, cols = 50:52, widths = c(8, 14, 22))
 
     for (r in which(is.na(tabla_anual[["Pp anual (mm)"]]))) {
@@ -260,20 +269,53 @@ procesar_pp <- function(file_xlsx) {
     nombre_estacion <- df_estaciones$Estacion[i]
     fila_fin_anual  <- nrow(tabla_anual) + 2
 
+    # Formatos de texto (Calibri) y grilla
+    txt_titulo  <- officer::fp_text(font.size = 14, font.family = "Calibri")
+    txt_rotulo  <- officer::fp_text(font.size = 10, font.family = "Calibri")
+    txt_ejes    <- officer::fp_text(font.size = 9,  font.family = "Calibri")
+    sin_linea   <- officer::fp_border(style = "none")
+    linea_grilla <- officer::fp_border(color = "#D9D9D9", width = 0.75)
+
+    # Aplica formato comun: sin leyenda, solo grilla horizontal mayor, sin titulo eje X
+    formatear_grafico <- function(g, ylab, ymax) {
+      g <- chart_labels(g, title = nombre_estacion, xlab = NULL, ylab = ylab)
+      g <- chart_ax_y(g, limits = c(0, ymax))            # eje vertical desde 0
+      g <- chart_theme(g,
+                       main_title   = txt_titulo,
+                       axis_title_y = txt_rotulo,
+                       axis_text_x  = txt_ejes,
+                       axis_text_y  = txt_ejes,
+                       legend_position = "n",
+                       grid_major_line_x = sin_linea,
+                       grid_minor_line_x = sin_linea,
+                       grid_minor_line_y = sin_linea,
+                       grid_major_line_y = linea_grilla)
+      g
+    }
+
+    maximo_nice <- function(v) {
+      v <- v[!is.na(v)]
+      if (length(v) == 0) return(1)
+      max(pretty(c(0, max(v))))
+    }
+
     # Grafico 1: Precipitacion media (columnas agrupadas), datos AU2:AV14 (sin Promedio anual)
     datos_g1 <- wb_data(wb, sheet = hoja, dims = "AU2:AV14")
+    datos_g1$MES <- as.character(datos_g1$MES)
     g1 <- ms_barchart(data = datos_g1, x = "MES", y = "Pp promedio (mm)")
-    g1 <- chart_labels(g1, title = nombre_estacion,
-                       xlab = "Mes", ylab = "Precipitación media (mm)")
+    g1 <- formatear_grafico(g1, "Precipitación media (mm)",
+                            maximo_nice(datos_g1[["Pp promedio (mm)"]]))
     wb$add_mschart(sheet = hoja, dims = "BB2:BI17", graph = g1)
 
-    # Grafico 2: Precipitacion anual (lineas con marcadores), datos AX2:AY...
+    # Grafico 2: Precipitacion anual (columnas agrupadas), datos AX2:AY...
     datos_g2 <- wb_data(wb, sheet = hoja, dims = paste0("AX2:AY", fila_fin_anual))
-    g2 <- ms_linechart(data = datos_g2, x = "YEAR", y = "Pp anual (mm)")
-    g2 <- chart_data_symbol(g2, values = "circle")
-    g2 <- chart_labels(g2, title = nombre_estacion,
-                       xlab = "Año", ylab = "Precipitación anual (mm)")
-    wb$add_mschart(sheet = hoja, dims = "BK2:BR17", graph = g2)
+    datos_g2$YEAR <- as.character(datos_g2$YEAR)   # años como categorias (no 1, 2, 3...)
+    g2 <- ms_barchart(data = datos_g2, x = "YEAR", y = "Pp anual (mm)")
+    g2 <- formatear_grafico(g2, "Precipitación anual (mm)",
+                            maximo_nice(datos_g2[["Pp anual (mm)"]]))
+    g2 <- chart_ax_y(g2, limits = c(0, maximo_nice(datos_g2[["Pp anual (mm)"]])))  # minimo = 0
+    g2 <- chart_ax_x(g2, rotate = -270)              # texto del eje X rotado 270°
+    wb$add_mschart(sheet = hoja, dims = "BB19:BI34", graph = g2)
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
