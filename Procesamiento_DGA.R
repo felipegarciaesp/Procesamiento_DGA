@@ -10,6 +10,9 @@ rm(list=ls())
 graphics.off()
 cat("\014")
 
+library(openxlsx2)
+library(mschart)
+
 ## Directorio de trabajo
 #-------------------
 setwd("C:/Codigos/Procesamiento_DGA")
@@ -42,12 +45,32 @@ buscar_columna <- function(df, patron, descripcion) {
   names(df)[idx[1]]
 }
 
+# Escribe un titulo con celdas unidas, en negrita y centrado (fila 1)
+escribir_titulo <- function(wb, hoja, texto, col_ini, col_fin) {
+  wb$add_data(sheet = hoja, x = texto, start_col = col_ini, start_row = 1, col_names = FALSE)
+  wb$merge_cells(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini:col_fin))
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), bold = TRUE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), horizontal = "center")
+}
+
+# Escribe una tabla con encabezado en negrita en la fila 2
+escribir_tabla <- function(wb, hoja, df, col_ini) {
+  wb$add_data(sheet = hoja, x = df, start_col = col_ini, start_row = 2)
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 2, cols = col_ini:(col_ini + ncol(df) - 1)),
+              bold = TRUE)
+}
+
+# Escribe #N/A mediante la formula =NA()
+escribir_na <- function(wb, hoja, fila, col) {
+  wb$add_formula(sheet = hoja, x = "NA()", dims = wb_dims(rows = fila, cols = col))
+}
+
 ## Procesamiento de precipitaciones
 #-------------------
 procesar_pp <- function(file_xlsx) {
 
-  hojas <- openxlsx::getSheetNames(file_xlsx)
-  df_estaciones <- openxlsx::read.xlsx(file_xlsx, sheet = "Estaciones")
+  hojas <- unname(wb_get_sheet_names(wb_load(file_xlsx)))
+  df_estaciones <- read_xlsx(file_xlsx, sheet = "Estaciones")
 
   # Rotulos y columnas de origen para la tabla de informacion
   info_rotulos  <- c("NOMBRE ESTACION", "CÓDIGO ESTACION", "REGIÓN",
@@ -55,10 +78,10 @@ procesar_pp <- function(file_xlsx) {
   info_columnas <- c("NOMBRE.ESTACION", "CODIGO.ESTACION", "REGION",
                      "UTM_ESTE", "UTM_NORTE", "ALTITUD")
 
-  wb <- openxlsx::createWorkbook()
-  estilo_fecha  <- openxlsx::createStyle(numFmt = "dd/mm/yyyy")
-  estilo_titulo <- openxlsx::createStyle(textDecoration = "bold", halign = "center")
-  estilo_enc    <- openxlsx::createStyle(textDecoration = "bold")
+  nombres_meses <- c("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+                     "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
+
+  wb <- wb_workbook()
 
   for (i in seq_len(nrow(df_estaciones))) {
 
@@ -70,7 +93,8 @@ procesar_pp <- function(file_xlsx) {
       next
     }
 
-    df <- openxlsx::read.xlsx(file_xlsx, sheet = hoja, detectDates = TRUE)
+    # check_names = TRUE: los espacios de los rotulos pasan a "." (como en openxlsx)
+    df <- read_xlsx(file_xlsx, sheet = hoja, detect_dates = TRUE, check_names = TRUE)
 
     if (nrow(df) == 0) {
       message("La pestana ", hoja, " no tiene datos.")
@@ -82,28 +106,26 @@ procesar_pp <- function(file_xlsx) {
     col_valor <- buscar_columna(df, "precip|^pp|valor", "precipitacion")
     col_unid  <- buscar_columna(df, "unidad", "unidad")
 
-    openxlsx::addWorksheet(wb, hoja)
+    wb$add_worksheet(hoja)
 
     # --- Tabla de informacion de la estacion (A1:B7) ---
-    openxlsx::writeData(wb, hoja, "Informacion de la Estación", startCol = 1, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 1:2, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 1)
+    escribir_titulo(wb, hoja, "Informacion de la Estación", 1, 2)
 
     valores_info <- sapply(info_columnas, function(col) as.character(df[[col]][1]))
-    openxlsx::writeData(wb, hoja, info_rotulos,  startCol = 1, startRow = 2)
-    openxlsx::writeData(wb, hoja, valores_info,  startCol = 2, startRow = 2)
+    wb$add_data(sheet = hoja, x = info_rotulos,  start_col = 1, start_row = 2, col_names = FALSE)
+    wb$add_data(sheet = hoja, x = unname(valores_info), start_col = 2, start_row = 2, col_names = FALSE)
 
     # --- Serie diaria (D1:F...) ---
-    serie <- data.frame(FECHA              = df[[col_fecha]],
+    serie <- data.frame(FECHA                = as.Date(df[[col_fecha]]),
                         Precipitación_diaria = df[[col_valor]],
-                        Unidad             = df[[col_unid]],
-                        stringsAsFactors   = FALSE)
-    openxlsx::writeData(wb, hoja, serie, startCol = 4, startRow = 1)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 1, cols = 4:6, gridExpand = TRUE)
-    openxlsx::addStyle(wb, hoja, estilo_fecha, rows = 2:(nrow(serie) + 1),
-                       cols = 4, gridExpand = TRUE, stack = TRUE)
+                        Unidad               = df[[col_unid]],
+                        stringsAsFactors     = FALSE)
+    wb$add_data(sheet = hoja, x = serie, start_col = 4, start_row = 1)
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = 4:6), bold = TRUE)
+    wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(nrow(serie) + 1), cols = 4),
+                  numfmt = "dd/mm/yyyy")
 
-    openxlsx::setColWidths(wb, hoja, cols = 1:6, widths = c(22, 28, 3, 12, 20, 10))
+    wb$set_col_widths(sheet = hoja, cols = 1:6, widths = c(22, 28, 3, 12, 20, 10))
 
     # --- Cantidad de registros por mes - Año calendario (K1:W...) ---
     fechas  <- as.Date(serie$FECHA)
@@ -119,38 +141,26 @@ procesar_pp <- function(file_xlsx) {
 
     tabla_conteo <- data.frame(YEAR = anios_unicos,
                                matrix(as.integer(conteo), nrow = length(anios_unicos), ncol = 12))
-    names(tabla_conteo) <- c("YEAR", "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-                             "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
+    names(tabla_conteo) <- c("YEAR", nombres_meses)
 
-    openxlsx::writeData(wb, hoja, "Cantidad de registros por mes - Año calendario",
-                        startCol = 11, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 11:23, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 11)
-
-    openxlsx::writeData(wb, hoja, tabla_conteo, startCol = 11, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 11:23, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 11:23, widths = c(8, rep(6, 12)))
+    escribir_titulo(wb, hoja, "Cantidad de registros por mes - Año calendario", 11, 23)
+    escribir_tabla(wb, hoja, tabla_conteo, 11)
+    wb$set_col_widths(sheet = hoja, cols = 11:23, widths = c(8, rep(6, 12)))
 
     # Escala de colores: 0 = rojo, 15 = amarillo, 31 = verde oscuro
-    openxlsx::conditionalFormatting(wb, hoja,
-                                    cols = 12:23,
-                                    rows = 3:(nrow(tabla_conteo) + 2),
-                                    style = c("#F8696B", "#FFEB84", "#006400"),
-                                    rule = c(0, 15, 31),
-                                    type = "colourScale")
+    wb$add_conditional_formatting(sheet = hoja,
+                                  dims = wb_dims(rows = 3:(nrow(tabla_conteo) + 2), cols = 12:23),
+                                  type = "colorScale",
+                                  style = c("#F8696B", "#FFEB84", "#006400"),
+                                  rule = c(0, 15, 31))
 
     # --- Cantidad de meses con información (Y1:Z...) ---
     tabla_meses <- data.frame(YEAR  = tabla_conteo$YEAR,
                               MESES = rowSums(tabla_conteo[, 2:13] > 0))
 
-    openxlsx::writeData(wb, hoja, "Cantidad de meses con información",
-                        startCol = 25, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 25:26, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 25)
-
-    openxlsx::writeData(wb, hoja, tabla_meses, startCol = 25, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 25:26, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 25:26, widths = c(8, 8))
+    escribir_titulo(wb, hoja, "Cantidad de meses con información", 25, 26)
+    escribir_tabla(wb, hoja, tabla_meses, 25)
+    wb$set_col_widths(sheet = hoja, cols = 25:26, widths = c(8, 8))
 
     # --- Precipitacion mensual (mm) - Año calendario (AB1:AN...) ---
     suma_mensual <- tapply(serie$Precipitación_diaria[validos],
@@ -161,30 +171,22 @@ procesar_pp <- function(file_xlsx) {
     tabla_pp <- data.frame(YEAR = anios_unicos,
                            matrix(as.numeric(suma_mensual),
                                   nrow = length(anios_unicos), ncol = 12))
-    names(tabla_pp) <- c("YEAR", "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-                         "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
+    names(tabla_pp) <- c("YEAR", nombres_meses)
 
-    openxlsx::writeData(wb, hoja, "Precipitacion mensual (mm) - Año calendario",
-                        startCol = 28, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 28:40, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 28)
+    escribir_titulo(wb, hoja, "Precipitacion mensual (mm) - Año calendario", 28, 40)
+    escribir_tabla(wb, hoja, tabla_pp, 28)
+    wb$set_col_widths(sheet = hoja, cols = 28:40, widths = c(8, rep(8, 12)))
 
-    openxlsx::writeData(wb, hoja, tabla_pp, startCol = 28, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 28:40, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 28:40, widths = c(8, rep(8, 12)))
-
-    # Meses sin datos: se escribe la formula =NA() (muestra #N/A en cualquier idioma de Excel)
+    # Meses sin datos: formula =NA()
     pos_na <- which(is.na(tabla_pp[, 2:13]), arr.ind = TRUE)
     if (nrow(pos_na) > 0) {
       for (k in seq_len(nrow(pos_na))) {
-        openxlsx::writeFormula(wb, hoja, x = "NA()",
-                               startCol = 28 + pos_na[k, 2],
-                               startRow = 2 + pos_na[k, 1])
+        escribir_na(wb, hoja, 2 + pos_na[k, 1], 28 + pos_na[k, 2])
       }
     }
 
     # --- Pp mensual (mm) - Año calendario, en vector (AP1:AS...) ---
-    n_anios <- length(anios_unicos)
+    n_anios  <- length(anios_unicos)
     vec_year <- rep(anios_unicos, each = 12)
     vec_mes  <- rep(1:12, times = n_anios)
 
@@ -194,27 +196,17 @@ procesar_pp <- function(file_xlsx) {
                             `Pp (mm)` = as.numeric(t(as.matrix(tabla_pp[, 2:13]))),
                             check.names = FALSE)
 
-    openxlsx::writeData(wb, hoja, "Pp mensual (mm) - Año calendario",
-                        startCol = 42, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 42:45, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 42)
+    escribir_titulo(wb, hoja, "Pp mensual (mm) - Año calendario", 42, 45)
+    escribir_tabla(wb, hoja, tabla_vec, 42)
+    wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 3:(nrow(tabla_vec) + 2), cols = 42),
+                  numfmt = "dd/mm/yyyy")
+    wb$set_col_widths(sheet = hoja, cols = 42:45, widths = c(12, 6, 8, 10))
 
-    openxlsx::writeData(wb, hoja, tabla_vec, startCol = 42, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 42:45, gridExpand = TRUE)
-    openxlsx::addStyle(wb, hoja, estilo_fecha, rows = 3:(nrow(tabla_vec) + 2),
-                       cols = 42, gridExpand = TRUE, stack = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 42:45, widths = c(12, 6, 8, 10))
-
-    # Meses sin datos: formula =NA() tambien en el vector
-    filas_na <- which(is.na(tabla_vec$`Pp (mm)`))
-    for (r in filas_na) {
-      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 45, startRow = 2 + r)
+    for (r in which(is.na(tabla_vec$`Pp (mm)`))) {
+      escribir_na(wb, hoja, 2 + r, 45)
     }
 
     # --- Precipitacion promedio mensual (mm) - Año calendario (AU1:AV...) ---
-    nombres_meses <- c("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-                       "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
-
     promedio_mensual <- sapply(2:13, function(j) {
       v <- tabla_pp[[j]]
       if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
@@ -224,27 +216,20 @@ procesar_pp <- function(file_xlsx) {
                              `Pp promedio (mm)` = promedio_mensual,
                              check.names = FALSE)
 
-    openxlsx::writeData(wb, hoja, "Precipitacion promedio mensual (mm) - Año calendario",
-                        startCol = 47, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 47:48, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 47)
+    escribir_titulo(wb, hoja, "Precipitacion promedio mensual (mm) - Año calendario", 47, 48)
+    escribir_tabla(wb, hoja, tabla_prom, 47)
 
-    openxlsx::writeData(wb, hoja, tabla_prom, startCol = 47, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 47:48, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 47:48, widths = c(8, 16))
-
-    # Meses sin ningun dato en todos los años: formula =NA()
     for (m in which(is.na(promedio_mensual))) {
-      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 48, startRow = 2 + m)
+      escribir_na(wb, hoja, 2 + m, 48)
     }
 
-    # Promedio anual (mm): suma de ENE a DIC ignorando #N/A (fila 15)
+    # Promedio anual (mm): suma de ENE a DIC ignorando NA (fila 15)
     promedio_anual <- sum(promedio_mensual, na.rm = TRUE)
 
-    openxlsx::writeData(wb, hoja, "Promedio anual (mm)", startCol = 47, startRow = 15)
-    openxlsx::writeData(wb, hoja, promedio_anual, startCol = 48, startRow = 15)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 15, cols = 47:48, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 47:48, widths = c(20, 16))
+    wb$add_data(sheet = hoja, x = "Promedio anual (mm)", start_col = 47, start_row = 15, col_names = FALSE)
+    wb$add_data(sheet = hoja, x = promedio_anual, start_col = 48, start_row = 15, col_names = FALSE)
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = 15, cols = 47:48), bold = TRUE)
+    wb$set_col_widths(sheet = hoja, cols = 47:48, widths = c(20, 16))
 
     # --- Pp anual y promedio anual (mm) - Año calendario (AX1:AZ...) ---
     pp_anual <- apply(tabla_pp[, 2:13], 1, function(v) {
@@ -258,26 +243,40 @@ procesar_pp <- function(file_xlsx) {
                                                            rep(NA_real_, length(anios_unicos) - 1)),
                               check.names = FALSE)
 
-    openxlsx::writeData(wb, hoja, "Pp anual y promedio anual (mm) - Año calendario",
-                        startCol = 50, startRow = 1)
-    openxlsx::mergeCells(wb, hoja, cols = 50:52, rows = 1)
-    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 50)
+    escribir_titulo(wb, hoja, "Pp anual y promedio anual (mm) - Año calendario", 50, 52)
+    escribir_tabla(wb, hoja, tabla_anual, 50)
+    wb$set_col_widths(sheet = hoja, cols = 50:52, widths = c(8, 14, 22))
 
-    openxlsx::writeData(wb, hoja, tabla_anual, startCol = 50, startRow = 2)
-    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 50:52, gridExpand = TRUE)
-    openxlsx::setColWidths(wb, hoja, cols = 50:52, widths = c(8, 14, 22))
-
-    # Años sin datos: formula =NA() (muestra #N/A)
     for (r in which(is.na(tabla_anual[["Pp anual (mm)"]]))) {
-      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 51, startRow = 2 + r)
+      escribir_na(wb, hoja, 2 + r, 51)
     }
-    # Promedio sin ningun año con datos: formula =NA() solo en la primera fila
     if (is.na(pp_prom_anual)) {
-      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 52, startRow = 3)
+      escribir_na(wb, hoja, 3, 52)
     }
+
+    # =================================================================
+    # Graficos (nativos de Excel, enlazados a las tablas de la pestaña)
+    # =================================================================
+    nombre_estacion <- df_estaciones$Estacion[i]
+    fila_fin_anual  <- nrow(tabla_anual) + 2
+
+    # Grafico 1: Precipitacion media (columnas agrupadas), datos AU2:AV14 (sin Promedio anual)
+    datos_g1 <- wb_data(wb, sheet = hoja, dims = "AU2:AV14")
+    g1 <- ms_barchart(data = datos_g1, x = "MES", y = "Pp promedio (mm)")
+    g1 <- chart_labels(g1, title = nombre_estacion,
+                       xlab = "Mes", ylab = "Precipitación media (mm)")
+    wb$add_mschart(sheet = hoja, dims = "BB2:BI17", graph = g1)
+
+    # Grafico 2: Precipitacion anual (lineas con marcadores), datos AX2:AY...
+    datos_g2 <- wb_data(wb, sheet = hoja, dims = paste0("AX2:AY", fila_fin_anual))
+    g2 <- ms_linechart(data = datos_g2, x = "YEAR", y = "Pp anual (mm)")
+    g2 <- chart_data_symbol(g2, values = "circle")
+    g2 <- chart_labels(g2, title = nombre_estacion,
+                       xlab = "Año", ylab = "Precipitación anual (mm)")
+    wb$add_mschart(sheet = hoja, dims = "BK2:BR17", graph = g2)
   }
 
-  openxlsx::saveWorkbook(wb, file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
+  wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
   message("Archivo generado: Resumen_PP.xlsx")
 }
 
