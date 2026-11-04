@@ -237,6 +237,44 @@ procesar_pp <- function(file_xlsx) {
     for (m in which(is.na(promedio_mensual))) {
       openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 48, startRow = 2 + m)
     }
+
+    # Promedio anual (mm): suma de ENE a DIC ignorando #N/A (fila 15)
+    promedio_anual <- sum(promedio_mensual, na.rm = TRUE)
+
+    openxlsx::writeData(wb, hoja, "Promedio anual (mm)", startCol = 47, startRow = 15)
+    openxlsx::writeData(wb, hoja, promedio_anual, startCol = 48, startRow = 15)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 15, cols = 47:48, gridExpand = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 47:48, widths = c(20, 16))
+
+    # --- Pp anual y promedio anual (mm) - Año calendario (AX1:AZ...) ---
+    pp_anual <- apply(tabla_pp[, 2:13], 1, function(v) {
+      if (all(is.na(v))) NA_real_ else sum(v, na.rm = TRUE)
+    })
+    pp_prom_anual <- if (all(is.na(pp_anual))) NA_real_ else mean(pp_anual, na.rm = TRUE)
+
+    tabla_anual <- data.frame(YEAR = anios_unicos,
+                              `Pp anual (mm)` = as.numeric(pp_anual),
+                              `Pp promedio anual (mm)` = c(pp_prom_anual,
+                                                           rep(NA_real_, length(anios_unicos) - 1)),
+                              check.names = FALSE)
+
+    openxlsx::writeData(wb, hoja, "Pp anual y promedio anual (mm) - Año calendario",
+                        startCol = 50, startRow = 1)
+    openxlsx::mergeCells(wb, hoja, cols = 50:52, rows = 1)
+    openxlsx::addStyle(wb, hoja, estilo_titulo, rows = 1, cols = 50)
+
+    openxlsx::writeData(wb, hoja, tabla_anual, startCol = 50, startRow = 2)
+    openxlsx::addStyle(wb, hoja, estilo_enc, rows = 2, cols = 50:52, gridExpand = TRUE)
+    openxlsx::setColWidths(wb, hoja, cols = 50:52, widths = c(8, 14, 22))
+
+    # Años sin datos: formula =NA() (muestra #N/A)
+    for (r in which(is.na(tabla_anual[["Pp anual (mm)"]]))) {
+      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 51, startRow = 2 + r)
+    }
+    # Promedio sin ningun año con datos: formula =NA() solo en la primera fila
+    if (is.na(pp_prom_anual)) {
+      openxlsx::writeFormula(wb, hoja, x = "NA()", startCol = 52, startRow = 3)
+    }
   }
 
   openxlsx::saveWorkbook(wb, file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
