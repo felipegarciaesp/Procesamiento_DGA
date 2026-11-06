@@ -13,6 +13,19 @@ cat("\014")
 library(openxlsx2)
 library(mschart)
 
+## Configuracion del año hidrologico
+#-------------------
+# Los meses se expresan como numero: 1 = ENE, 2 = FEB, 3 = MAR, 4 = ABR, ..., 12 = DIC
+# El año hidrologico va desde el mes inicial del año X hasta el mes final del año X+1.
+# Por defecto: 4 (ABR) del año X hasta 3 (MAR) del año X+1  ->  ejemplo: 1999/00
+mes_inicio_hidro <- 4   # 4 = ABR (mes inicial, año X)
+mes_fin_hidro    <- 3   # 3 = MAR (mes final, año X+1)
+
+# Validacion: el mes final debe ser el mes anterior al mes inicial (12 meses en total)
+if (mes_fin_hidro != ((mes_inicio_hidro + 10) %% 12) + 1) {
+  stop("mes_fin_hidro debe ser el mes anterior a mes_inicio_hidro (el año hidrologico debe tener 12 meses).")
+}
+
 ## Directorio de trabajo
 #-------------------
 setwd("C:/Codigos/Procesamiento_DGA")
