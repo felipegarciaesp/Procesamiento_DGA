@@ -358,6 +358,14 @@ procesar_pp <- function(file_xlsx) {
                                   type = "colorScale",
                                   style = c("#F8696B", "#FFEB84", "#006400"),
                                   rule = c(0, 15, 31))
+
+    # --- Cantidad de meses con información - Año hidrologico (BY1:BZ...) ---
+    tabla_meses_h <- data.frame(YEAR  = etiq_h,
+                                MESES = rowSums(tabla_conteo_h[, 2:13] > 0))
+
+    escribir_titulo(wb, hoja, "Cantidad de meses con información - Año hidrologico", 77, 78)
+    escribir_tabla(wb, hoja, tabla_meses_h, 77)
+    wb$set_col_widths(sheet = hoja, cols = 77:78, widths = c(10, 8))
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
