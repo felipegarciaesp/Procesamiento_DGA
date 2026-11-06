@@ -329,6 +329,35 @@ procesar_pp <- function(file_xlsx) {
     g2 <- chart_ax_y(g2, limits = c(0, maximo_nice(datos_g2[["Pp anual (mm)"]])))  # minimo = 0
     g2 <- chart_ax_x(g2, rotate = -270)              # texto del eje X rotado 270°
     wb$add_mschart(sheet = hoja, dims = "BB19:BI34", graph = g2)
+
+    # --- Cantidad de registros por mes - Año hidrologico (BK1:BW...) ---
+    orden_h <- ((mes_inicio_hidro - 1 + 0:11) %% 12) + 1   # meses en orden hidrologico
+    meses_h <- nombres_meses[orden_h]
+
+    # Año hidrologico de cada dato: inicia en X si mes >= mes de inicio, si no en X-1
+    ys <- anios - as.integer(meses < mes_inicio_hidro)
+    hm <- ((meses - mes_inicio_hidro) %% 12) + 1           # posicion del mes en el año hidrologico
+    ys_unicos <- seq(min(ys), max(ys))
+    etiq_h    <- sprintf("%d/%02d", ys_unicos, (ys_unicos + 1) %% 100)   # ej: 1999/00
+    n_h       <- length(ys_unicos)
+
+    conteo_h <- table(factor(ys, levels = ys_unicos),
+                      factor(hm, levels = 1:12))
+
+    tabla_conteo_h <- data.frame(YEAR = etiq_h,
+                                 matrix(as.integer(conteo_h), nrow = n_h, ncol = 12))
+    names(tabla_conteo_h) <- c("YEAR", meses_h)
+
+    escribir_titulo(wb, hoja, "Cantidad de registros por mes - Año hidrologico", 63, 75)
+    escribir_tabla(wb, hoja, tabla_conteo_h, 63)
+    wb$set_col_widths(sheet = hoja, cols = 63:75, widths = c(10, rep(6, 12)))
+
+    # Escala de colores: 0 = rojo, 15 = amarillo, 31 = verde oscuro
+    wb$add_conditional_formatting(sheet = hoja,
+                                  dims = wb_dims(rows = 3:(n_h + 2), cols = 64:75),
+                                  type = "colorScale",
+                                  style = c("#F8696B", "#FFEB84", "#006400"),
+                                  rule = c(0, 15, 31))
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
