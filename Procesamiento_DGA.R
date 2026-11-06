@@ -410,6 +410,40 @@ procesar_pp <- function(file_xlsx) {
     for (r in which(is.na(tabla_vec_h$`Pp (mm)`))) {
       escribir_na(wb, hoja, 2 + r, 97)
     }
+
+    # --- Precipitacion promedio mensual (mm) - Año hidrologico (CU1:CV...) ---
+    promedio_mensual_h <- sapply(2:13, function(j) {
+      v <- tabla_pp_h[[j]]
+      if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
+    })
+
+    tabla_prom_h <- data.frame(MES = meses_h,
+                               `Pp promedio (mm)` = promedio_mensual_h,
+                               check.names = FALSE)
+
+    escribir_titulo(wb, hoja, "Precipitacion promedio mensual (mm) - Año hidrologico", 99, 100)
+    escribir_tabla(wb, hoja, tabla_prom_h, 99)
+
+    for (m in which(is.na(promedio_mensual_h))) {
+      escribir_na(wb, hoja, 2 + m, 100)
+    }
+
+    # Etiquetas de los dos semestres segun el mes de inicio (ej: ABR-SEP y OCT-MAR)
+    lab_h1 <- paste0(meses_h[1], "-", meses_h[6])
+    lab_h2 <- paste0(meses_h[7], "-", meses_h[12])
+
+    # Promedio anual y por semestre: suma de los promedios mensuales (filas 15 a 17)
+    etiquetas_prom_h <- c("Promedio anual (mm)",
+                          paste0("Promedio ", lab_h1, " (mm)"),
+                          paste0("Promedio ", lab_h2, " (mm)"))
+    valores_prom_h   <- c(sum(promedio_mensual_h,       na.rm = TRUE),
+                          sum(promedio_mensual_h[1:6],  na.rm = TRUE),
+                          sum(promedio_mensual_h[7:12], na.rm = TRUE))
+
+    wb$add_data(sheet = hoja, x = etiquetas_prom_h, start_col = 99,  start_row = 15, col_names = FALSE)
+    wb$add_data(sheet = hoja, x = valores_prom_h,   start_col = 100, start_row = 15, col_names = FALSE)
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = 15:17, cols = 99:100), bold = TRUE)
+    wb$set_col_widths(sheet = hoja, cols = 99:100, widths = c(28, 16))
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
