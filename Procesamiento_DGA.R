@@ -444,6 +444,52 @@ procesar_pp <- function(file_xlsx) {
     wb$add_data(sheet = hoja, x = valores_prom_h,   start_col = 100, start_row = 15, col_names = FALSE)
     wb$add_font(sheet = hoja, dims = wb_dims(rows = 15:17, cols = 99:100), bold = TRUE)
     wb$set_col_widths(sheet = hoja, cols = 99:100, widths = c(28, 16))
+
+    # --- Pp anual y promedio anual (mm) - Año hidrologico (CX1:DD...) ---
+    suma_na  <- function(v) if (all(is.na(v))) NA_real_ else sum(v, na.rm = TRUE)
+    media_na <- function(v) if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
+
+    pp_anual_h <- apply(tabla_pp_h[, 2:13], 1, suma_na)   # 12 meses
+    pp_h1      <- apply(tabla_pp_h[, 2:7],  1, suma_na)   # primeros 6 meses
+    pp_h2      <- apply(tabla_pp_h[, 8:13], 1, suma_na)   # ultimos 6 meses
+
+    tabla_anual_h <- data.frame(etiq_h,
+                                as.numeric(pp_anual_h),
+                                as.numeric(pp_h1),
+                                as.numeric(pp_h2))
+    names(tabla_anual_h) <- c("YEAR", "Pp anual (mm)",
+                              paste0("Pp anual ", lab_h1, " (mm)"),
+                              paste0("Pp anual ", lab_h2, " (mm)"))
+
+    escribir_titulo(wb, hoja, "Pp anual y promedio anual (mm) - Año hidrologico", 102, 108)
+    escribir_tabla(wb, hoja, tabla_anual_h, 102)
+
+    # Promedios: encabezado y un unico valor en la primera fila de datos
+    enc_prom_h <- c("Pp promedio anual (mm)",
+                    paste0("Pp promedio ", lab_h1, " (mm)"),
+                    paste0("Pp promedio ", lab_h2, " (mm)"))
+    val_prom_h <- c(media_na(pp_anual_h), media_na(pp_h1), media_na(pp_h2))
+
+    for (k in 1:3) {
+      col_k <- 105 + k   # 106, 107, 108
+      wb$add_data(sheet = hoja, x = enc_prom_h[k], start_col = col_k, start_row = 2,
+                  col_names = FALSE)
+      wb$add_font(sheet = hoja, dims = wb_dims(rows = 2, cols = col_k), bold = TRUE)
+      if (is.na(val_prom_h[k])) {
+        escribir_na(wb, hoja, 3, col_k)
+      } else {
+        wb$add_data(sheet = hoja, x = val_prom_h[k], start_col = col_k, start_row = 3,
+                    col_names = FALSE)
+      }
+    }
+    wb$set_col_widths(sheet = hoja, cols = 102:108, widths = c(10, 14, 20, 20, 22, 26, 26))
+
+    # Años sin datos: formula =NA() en las 3 columnas de precipitacion
+    for (j in 1:3) {
+      for (r in which(is.na(tabla_anual_h[[j + 1]]))) {
+        escribir_na(wb, hoja, 2 + r, 102 + j)
+      }
+    }
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
