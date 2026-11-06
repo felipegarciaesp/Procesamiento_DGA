@@ -366,6 +366,50 @@ procesar_pp <- function(file_xlsx) {
     escribir_titulo(wb, hoja, "Cantidad de meses con información - Año hidrologico", 77, 78)
     escribir_tabla(wb, hoja, tabla_meses_h, 77)
     wb$set_col_widths(sheet = hoja, cols = 77:78, widths = c(10, 8))
+
+    # --- Precipitación mensual (mm) - Año hidrologico (CB1:CN...) ---
+    suma_mensual_h <- tapply(serie$Precipitación_diaria[validos],
+                             list(factor(ys, levels = ys_unicos),
+                                  factor(hm, levels = 1:12)),
+                             sum)
+
+    tabla_pp_h <- data.frame(YEAR = etiq_h,
+                             matrix(as.numeric(suma_mensual_h), nrow = n_h, ncol = 12))
+    names(tabla_pp_h) <- c("YEAR", meses_h)
+
+    escribir_titulo(wb, hoja, "Precipitación mensual (mm) - Año hidrologico", 80, 92)
+    escribir_tabla(wb, hoja, tabla_pp_h, 80)
+    wb$set_col_widths(sheet = hoja, cols = 80:92, widths = c(10, rep(8, 12)))
+
+    # Meses sin datos: formula =NA()
+    pos_na_h <- which(is.na(tabla_pp_h[, 2:13]), arr.ind = TRUE)
+    if (nrow(pos_na_h) > 0) {
+      for (k in seq_len(nrow(pos_na_h))) {
+        escribir_na(wb, hoja, 2 + pos_na_h[k, 1], 80 + pos_na_h[k, 2])
+      }
+    }
+
+    # --- Pp mensual (mm) - Año hidrologico, en vector (CP1:CS...) ---
+    vec_pos_h    <- rep(1:12, times = n_h)
+    vec_mes_h    <- orden_h[vec_pos_h]                        # numero de mes calendario
+    vec_ys_h     <- rep(ys_unicos, each = 12)
+    vec_anio_cal <- vec_ys_h + as.integer(vec_mes_h < mes_inicio_hidro)
+
+    tabla_vec_h <- data.frame(FECHA     = as.Date(sprintf("%d-%02d-01", vec_anio_cal, vec_mes_h)),
+                              MES       = vec_mes_h,
+                              YEAR      = rep(etiq_h, each = 12),
+                              `Pp (mm)` = as.numeric(t(as.matrix(tabla_pp_h[, 2:13]))),
+                              check.names = FALSE)
+
+    escribir_titulo(wb, hoja, "Pp mensual (mm) - Año hidrologico", 94, 97)
+    escribir_tabla(wb, hoja, tabla_vec_h, 94)
+    wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 3:(nrow(tabla_vec_h) + 2), cols = 94),
+                  numfmt = "dd/mm/yyyy")
+    wb$set_col_widths(sheet = hoja, cols = 94:97, widths = c(12, 6, 10, 10))
+
+    for (r in which(is.na(tabla_vec_h$`Pp (mm)`))) {
+      escribir_na(wb, hoja, 2 + r, 97)
+    }
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
