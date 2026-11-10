@@ -320,7 +320,7 @@ procesar_pp <- function(file_xlsx) {
                             maximo_nice(datos_g1[["Pp promedio (mm)"]]))
     wb$add_mschart(sheet = hoja, dims = "BB2:BI17", graph = g1)
 
-    # Grafico 2: Precipitacion anual (columnas agrupadas), datos AX2:AY...
+    # Grafico 2: Precipitation anual (columnas agrupadas), datos AX2:AY...
     datos_g2 <- wb_data(wb, sheet = hoja, dims = paste0("AX2:AY", fila_fin_anual))
     datos_g2$YEAR <- as.character(datos_g2$YEAR)   # años como categorias (no 1, 2, 3...)
     g2 <- ms_barchart(data = datos_g2, x = "YEAR", y = "Pp anual (mm)")
@@ -377,7 +377,7 @@ procesar_pp <- function(file_xlsx) {
                              matrix(as.numeric(suma_mensual_h), nrow = n_h, ncol = 12))
     names(tabla_pp_h) <- c("YEAR", meses_h)
 
-    escribir_titulo(wb, hoja, "Precipitación mensual (mm) - Año hidrologico", 80, 92)
+    escribir_titulo(wb, hoja, "Precipitacion mensual (mm) - Año hidrologico", 80, 92)
     escribir_tabla(wb, hoja, tabla_pp_h, 80)
     wb$set_col_widths(sheet = hoja, cols = 80:92, widths = c(10, rep(8, 12)))
 
@@ -490,6 +490,27 @@ procesar_pp <- function(file_xlsx) {
         escribir_na(wb, hoja, 2 + r, 102 + j)
       }
     }
+
+    # Grafico: Precipitacion media mensual - Año hidrologico (DF2:DM17)
+    # Rotulos: meses (columna CU); valores: Pp promedio (columna CV), filas 2 a 14
+    datos_gh1 <- wb_data(wb, sheet = hoja, dims = "CU2:CV14")
+    datos_gh1$MES <- as.character(datos_gh1$MES)
+    gh1 <- ms_barchart(data = datos_gh1, x = "MES", y = "Pp promedio (mm)")
+    gh1 <- formatear_grafico(gh1, "Precipitación media (mm)",
+                             maximo_nice(datos_gh1[["Pp promedio (mm)"]]))
+    wb$add_mschart(sheet = hoja, dims = "DF2:DM17", graph = gh1)
+
+    # Grafico: Precipitacion anual - Año hidrologico (DF19:DM34)
+    # Rotulos: años hidrologicos (columna CX); valores: Pp anual (columna CY)
+    fila_fin_anual_h <- nrow(tabla_anual_h) + 2
+    datos_gh2 <- wb_data(wb, sheet = hoja, dims = paste0("CX2:CY", fila_fin_anual_h))
+    datos_gh2$YEAR <- as.character(datos_gh2$YEAR)   # años hidrologicos como categorias (1999/00)
+    gh2 <- ms_barchart(data = datos_gh2, x = "YEAR", y = "Pp anual (mm)")
+    ymax_gh2 <- maximo_nice(datos_gh2[["Pp anual (mm)"]])
+    gh2 <- formatear_grafico(gh2, "Precipitación anual (mm)", ymax_gh2)
+    gh2 <- chart_ax_y(gh2, limits = c(0, ymax_gh2))  # minimo = 0
+    gh2 <- chart_ax_x(gh2, rotate = -270)            # texto del eje X rotado 270°
+    wb$add_mschart(sheet = hoja, dims = "DF19:DM34", graph = gh2)
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
