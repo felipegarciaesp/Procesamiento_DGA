@@ -505,12 +505,36 @@ procesar_pp <- function(file_xlsx) {
     fila_fin_anual_h <- nrow(tabla_anual_h) + 2
     datos_gh2 <- wb_data(wb, sheet = hoja, dims = paste0("CX2:CY", fila_fin_anual_h))
     datos_gh2$YEAR <- as.character(datos_gh2$YEAR)   # años hidrologicos como categorias (1999/00)
+
+    # Maximo comun para los 3 graficos anuales (anual, semestre 1 y semestre 2)
+    ymax_comun_h <- maximo_nice(c(tabla_anual_h[[2]], tabla_anual_h[[3]], tabla_anual_h[[4]]))
+
     gh2 <- ms_barchart(data = datos_gh2, x = "YEAR", y = "Pp anual (mm)")
-    ymax_gh2 <- maximo_nice(datos_gh2[["Pp anual (mm)"]])
-    gh2 <- formatear_grafico(gh2, "Precipitación anual (mm)", ymax_gh2)
-    gh2 <- chart_ax_y(gh2, limits = c(0, ymax_gh2))  # minimo = 0
+    gh2 <- formatear_grafico(gh2, "Precipitación anual (mm)", ymax_comun_h)
+    gh2 <- chart_ax_y(gh2, limits = c(0, ymax_comun_h))  # mismo rango en los 3 graficos
     gh2 <- chart_ax_x(gh2, rotate = -270)            # texto del eje X rotado 270°
     wb$add_mschart(sheet = hoja, dims = "DF19:DM34", graph = gh2)
+
+    # Graficos: Precipitacion anual por semestre - Año hidrologico
+    # Rotulos: años hidrologicos (columna CX); valores: columna CZ (semestre 1) y DA (semestre 2)
+    crear_grafico_semestre_h <- function(col_valor, nombre_y, ylab, dims_graf) {
+      dd <- wb_data(wb, sheet = hoja,
+                    dims = paste0("CX2:", col_valor, fila_fin_anual_h))
+      dd <- dd[, c(1, ncol(dd))]                       # columna CX y columna de valores
+      names(dd) <- c("YEAR", nombre_y)
+      dd$YEAR <- as.character(dd$YEAR)
+      g <- ms_barchart(data = dd, x = "YEAR", y = nombre_y)
+      g <- formatear_grafico(g, ylab, ymax_comun_h)
+      g <- chart_ax_y(g, limits = c(0, ymax_comun_h))  # mismo rango que los otros graficos
+      g <- chart_ax_x(g, rotate = -270)                # texto del eje X rotado 270°
+      wb$add_mschart(sheet = hoja, dims = dims_graf, graph = g)
+    }
+
+    # Semestre 1 (columna CZ) y semestre 2 (columna DA)
+    crear_grafico_semestre_h("CZ", paste0("Pp anual ", lab_h1, " (mm)"),
+                             paste0("Precipitación anual ", lab_h1, " (mm)"), "DF36:DM51")
+    crear_grafico_semestre_h("DA", paste0("Pp anual ", lab_h2, " (mm)"),
+                             paste0("Precipitación anual ", lab_h2, " (mm)"), "DF53:DM68")
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
