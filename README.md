@@ -3,6 +3,25 @@ Codigo para procesar los datos de estaciones DGA. Este codigo toma como inputs l
 
 ## Supuestos de funcionamiento
 
+### Serie diaria continua
+
+En cada pestaña de estación de `Resumen_PP.xlsx`, las columnas DO:DU contienen
+una serie diaria continua desde la fecha mínima hasta la máxima de la serie
+original de D:F, incluyendo las fechas con precipitación vacía. Los encabezados
+son FECHA, DIA, MES, YEAR, Hydro YEAR, Pp diaria y Unidad.
+
+- DIA, MES, YEAR y Hydro YEAR son fórmulas de Excel basadas en FECHA.
+  Hydro YEAR sigue el mes inicial configurado en el script y usa el formato
+  `1999/00`.
+- Pp diaria contiene una copia del valor original de la columna E, sin fórmula.
+  Cuando no existe un registro o su precipitación es `NA`, contiene la fórmula
+  `=NA()`; si falta el registro, la unidad queda vacía.
+- Si existen fechas duplicadas en la serie original, se usa el primer registro.
+  La secuencia de fechas y las correspondencias se generan al ejecutar el script;
+  al modificar las fechas o precipitaciones originales es necesario volver a
+  ejecutarlo.
+- Las fórmulas se calculan al abrir el archivo en Excel.
+
 ### Rango de años de las tablas de conteo
 
 Las tablas "Cantidad de registros por mes - Año calendario" y "Cantidad de meses con información" se construyen a partir de la serie diaria de precipitación de cada estación.

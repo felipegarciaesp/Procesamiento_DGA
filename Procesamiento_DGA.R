@@ -78,6 +78,63 @@ escribir_na <- function(wb, hoja, fila, col) {
   wb$add_formula(sheet = hoja, x = "NA()", dims = wb_dims(rows = fila, cols = col))
 }
 
+# Reconstruye la serie diaria a partir de las fechas de la tabla D:F.
+escribir_serie_continua <- function(wb, hoja, serie, mes_inicio_hidro) {
+  fechas_validas <- serie$FECHA[!is.na(serie$FECHA)]
+  if (length(fechas_validas) == 0) {
+    stop("La pestana ", hoja, " no contiene fechas validas.")
+  }
+
+  fecha_ini <- min(fechas_validas)
+  fecha_fin <- max(fechas_validas)
+  n_dias <- as.integer(fecha_fin - fecha_ini) + 1L
+  if (n_dias > 1048575L) {
+    stop("La serie continua de la pestana ", hoja, " supera el limite de filas de Excel.")
+  }
+
+  fechas <- seq(fecha_ini, fecha_fin, by = "day")
+  origen <- match(fechas, serie$FECHA)
+  filas <- seq_len(n_dias) + 1L
+  refs_fecha <- paste0("DO", filas)
+
+  encabezados <- c("FECHA", "DIA", "MES", "YEAR", "Hydro YEAR", "Pp diaria", "Unidad")
+  wb$add_data(sheet = hoja, x = matrix(encabezados, nrow = 1),
+              start_col = 119, start_row = 1, col_names = FALSE)
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = 119:125), bold = TRUE)
+  wb$add_data(sheet = hoja, x = fechas, start_col = 119, start_row = 2, col_names = FALSE)
+  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(n_dias + 1L), cols = 119),
+                numfmt = "dd/mm/yyyy")
+
+  formulas <- list(
+    paste0("DAY(", refs_fecha, ")"),
+    paste0("MONTH(", refs_fecha, ")"),
+    paste0("YEAR(", refs_fecha, ")"),
+    paste0("YEAR(", refs_fecha, ")-(MONTH(", refs_fecha, ")<", mes_inicio_hidro,
+           ")&\"/\"&TEXT(MOD(YEAR(", refs_fecha, ")-(MONTH(", refs_fecha, ")<",
+           mes_inicio_hidro, ")+1,100),\"00\")")
+  )
+  for (j in seq_along(formulas)) {
+    wb$add_formula(sheet = hoja, x = formulas[[j]],
+                   dims = wb_dims(rows = 2:(n_dias + 1L), cols = 119 + j))
+  }
+  precipitacion <- serie$Precipitación_diaria[origen]
+  wb$add_data(sheet = hoja, x = precipitacion, start_col = 124, start_row = 2,
+              col_names = FALSE, na = NULL)
+  filas_na <- filas[is.na(precipitacion)]
+  if (length(filas_na) > 0) {
+    grupos_na <- split(filas_na, cumsum(c(TRUE, diff(filas_na) != 1L)))
+    for (grupo in grupos_na) {
+      wb$add_formula(sheet = hoja, x = rep("NA()", length(grupo)),
+                     dims = wb_dims(rows = grupo, cols = 124))
+    }
+  }
+  unidades <- serie$Unidad[origen]
+  unidades[is.na(origen)] <- ""
+  wb$add_data(sheet = hoja, x = unidades,
+              start_col = 125, start_row = 2, col_names = FALSE)
+  wb$set_col_widths(sheet = hoja, cols = 119:125, widths = c(12, 6, 6, 8, 12, 12, 10))
+}
+
 ## Procesamiento de precipitaciones
 #-------------------
 procesar_pp <- function(file_xlsx) {
@@ -139,6 +196,9 @@ procesar_pp <- function(file_xlsx) {
                   numfmt = "dd/mm/yyyy")
 
     wb$set_col_widths(sheet = hoja, cols = 1:6, widths = c(22, 28, 3, 12, 20, 10))
+
+    # --- Serie diaria continua (DO1:DU...) ---
+    escribir_serie_continua(wb, hoja, serie, mes_inicio_hidro)
 
     # --- Cantidad de registros por mes - Año calendario (K1:W...) ---
     fechas  <- as.Date(serie$FECHA)
