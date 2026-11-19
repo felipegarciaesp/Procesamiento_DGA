@@ -352,7 +352,7 @@ procesar_pp <- function(file_xlsx) {
     # Aplica formato comun: sin leyenda, solo grilla horizontal mayor, sin titulo eje X
     formatear_grafico <- function(g, ylab, ymax) {
       g <- chart_labels(g, title = nombre_estacion, xlab = NULL, ylab = ylab)
-      g <- chart_ax_y(g, limits = c(0, ymax))            # eje vertical desde 0
+      g <- chart_ax_y(g, limit_min = 0, limit_max = ymax) # eje vertical desde 0
       g <- chart_theme(g,
                        main_title   = txt_titulo,
                        axis_title_y = txt_rotulo,
@@ -386,8 +386,7 @@ procesar_pp <- function(file_xlsx) {
     g2 <- ms_barchart(data = datos_g2, x = "YEAR", y = "Pp anual (mm)")
     g2 <- formatear_grafico(g2, "Precipitación anual (mm)",
                             maximo_nice(datos_g2[["Pp anual (mm)"]]))
-    g2 <- chart_ax_y(g2, limits = c(0, maximo_nice(datos_g2[["Pp anual (mm)"]])))  # minimo = 0
-    g2 <- chart_ax_x(g2, rotate = -270)              # texto del eje X rotado 270°
+    g2 <- chart_ax_x(g2, rotation = -90)               # texto del eje X rotado 90° en sentido contrario
     wb$add_mschart(sheet = hoja, dims = "BB19:BI34", graph = g2)
 
     # --- Cantidad de registros por mes - Año hidrologico (BK1:BW...) ---
@@ -571,8 +570,7 @@ procesar_pp <- function(file_xlsx) {
 
     gh2 <- ms_barchart(data = datos_gh2, x = "YEAR", y = "Pp anual (mm)")
     gh2 <- formatear_grafico(gh2, "Precipitación anual (mm)", ymax_comun_h)
-    gh2 <- chart_ax_y(gh2, limits = c(0, ymax_comun_h))  # mismo rango en los 3 graficos
-    gh2 <- chart_ax_x(gh2, rotate = -270)            # texto del eje X rotado 270°
+    gh2 <- chart_ax_x(gh2, rotation = -90)             # texto del eje X rotado 90° en sentido contrario
     wb$add_mschart(sheet = hoja, dims = "DF19:DM34", graph = gh2)
 
     # Graficos: Precipitacion anual por semestre - Año hidrologico
@@ -585,8 +583,7 @@ procesar_pp <- function(file_xlsx) {
       dd$YEAR <- as.character(dd$YEAR)
       g <- ms_barchart(data = dd, x = "YEAR", y = nombre_y)
       g <- formatear_grafico(g, ylab, ymax_comun_h)
-      g <- chart_ax_y(g, limits = c(0, ymax_comun_h))  # mismo rango que los otros graficos
-      g <- chart_ax_x(g, rotate = -270)                # texto del eje X rotado 270°
+      g <- chart_ax_x(g, rotation = -90)               # texto del eje X rotado 90° en sentido contrario
       wb$add_mschart(sheet = hoja, dims = dims_graf, graph = g)
     }
 
