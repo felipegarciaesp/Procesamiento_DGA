@@ -1,0 +1,15 @@
+# Datos de entrada: se ignora todo el contenido de Inputs,
+# excepto .gitkeep, para que la carpeta (vacia) se vea en GitHub
+Inputs/*
+!Inputs/.gitkeep
+
+# Resultados: la carpeta Outputs completa no se versiona
+Outputs/
+
+# Archivos temporales de Excel
+~$*
+
+# Historial y archivos de sesion de R
+.Rhistory
+.RData
+.Rproj.user/
