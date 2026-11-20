@@ -350,8 +350,8 @@ procesar_pp <- function(file_xlsx) {
     linea_grilla <- officer::fp_border(color = "#D9D9D9", width = 0.75)
 
     # Aplica formato comun: sin leyenda, solo grilla horizontal mayor, sin titulo eje X
-    formatear_grafico <- function(g, ylab, ymax) {
-      g <- chart_labels(g, title = nombre_estacion, xlab = NULL, ylab = ylab)
+    formatear_grafico <- function(g, ylab, ymax, titulo = nombre_estacion) {
+      g <- chart_labels(g, title = titulo, xlab = NULL, ylab = ylab)
       g <- chart_ax_y(g, limit_min = 0, limit_max = ymax) # eje vertical desde 0
       g <- chart_theme(g,
                        main_title   = txt_titulo,
@@ -592,6 +592,28 @@ procesar_pp <- function(file_xlsx) {
                              paste0("Precipitación anual ", lab_h1, " (mm)"), "DF36:DM51")
     crear_grafico_semestre_h("DA", paste0("Pp anual ", lab_h2, " (mm)"),
                              paste0("Precipitación anual ", lab_h2, " (mm)"), "DF53:DM68")
+
+    # Grafico: precipitacion diaria continua (fechas en DO, valores en DT)
+    fila_fin_diaria <- as.integer(max(serie$FECHA) - min(serie$FECHA)) + 2L
+    datos_gdiario <- wb_data(wb, sheet = hoja,
+                             dims = paste0("DO1:DT", fila_fin_diaria))
+    datos_gdiario <- datos_gdiario[, c(1, ncol(datos_gdiario))]
+    gdiario <- ms_barchart(data = datos_gdiario, x = "FECHA", y = "Pp diaria")
+    gdiario <- chart_settings(gdiario, grouping = "clustered",
+                              dir = "vertical", gap_width = 0)
+    gdiario <- formatear_grafico(gdiario, "Precipitación diaria (mm)",
+                                 maximo_nice(datos_gdiario[["Pp diaria"]]),
+                                 titulo = paste0("Precipitaciones diarias - ", nombre_estacion))
+    gdiario <- chart_ax_x(gdiario, rotation = -90, num_fmt = "mm/yyyy",
+                          major_unit = 6, major_time_unit = "months",
+                          minor_unit = 1, minor_time_unit = "months")
+
+    # Anclado en DW1, con tamaño 22.44 x 4.72 pulgadas.
+    wb$set_col_widths(sheet = hoja, cols = 127:159, widths = rep(8.43, 33))
+    # Los offsets completan el tamaño sobre 33 columnas de 64 px y 21 filas de 16 pt.
+    wb$add_mschart(sheet = hoja, dims = "DW1:FC21", graph = gdiario,
+                   col_offset = c(0, 22.44 * 914400 - 33 * 64 * 9525),
+                   row_offset = c(0, 4.72 * 914400 - 21 * 16 * 12700))
   }
 
   wb$save(file.path(dir_outputs, "Resumen_PP.xlsx"), overwrite = TRUE)
