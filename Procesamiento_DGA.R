@@ -165,10 +165,19 @@ info_rotulos  <- c("NOMBRE ESTACION", "CÓDIGO ESTACION", "REGIÓN",
 info_columnas <- c("NOMBRE.ESTACION", "CODIGO.ESTACION", "REGION",
                    "UTM_ESTE", "UTM_NORTE", "ALTITUD")
 
-# Columnas de inicio de cada bloque en las pestañas de salida
-col_bloque_calendario <- 11    # K
-col_bloque_hidro      <- 63    # BK
-col_serie_continua    <- 119   # DO
+## Disposicion de las tablas en las pestañas de salida
+# Las tablas y graficos se ubican automaticamente de izquierda a derecha, uno
+# a continuacion del otro, en el orden definido en disponer_hoja() (seccion 7).
+# Sus posiciones se calculan a partir del ancho real de cada tabla, por lo que
+# agregar, quitar o ensanchar una tabla desplaza automaticamente a las demas.
+# Para cambiar separaciones o tamaños basta con modificar estos valores.
+separacion_tablas     <- 1    # columnas vacias entre tablas y bloques
+separacion_tras_serie <- 4    # columnas vacias despues de la serie original (G:J)
+ancho_grafico         <- 8    # columnas que ocupa cada grafico de periodo
+alto_grafico          <- 16   # filas que ocupa cada grafico de periodo
+separacion_graficos   <- 1    # filas vacias entre graficos de periodo
+ancho_grafico_diario  <- 33   # columnas del grafico de la serie diaria
+alto_grafico_diario   <- 21   # filas del grafico de la serie diaria
 
 # Formatos de texto (Calibri) y grilla de los graficos
 txt_titulo   <- officer::fp_text(font.size = 14, font.family = "Calibri")
@@ -328,49 +337,22 @@ calcular_periodo <- function(fechas, valores, mes_inicio, agregacion, hidrologic
 }
 
 # =====================================================================
-# 7. ESCRITURA EN EXCEL
+# 7. ARMADO DE TABLAS Y DISPOSICION EN LA PESTAÑA (sin Excel)
 # =====================================================================
-# Los valores NA se escriben como #N/A (valor de error nativo de Excel,
-# sin formulas) mediante na = na_strings().
+# Primero se arman todas las tablas como data.frames; luego se calcula donde
+# va cada una segun su ancho (disposicion automatica) y recien despues se
+# escriben en Excel (seccion 8).
 
-# Escribe un titulo con celdas unidas, en negrita y centrado (fila 1)
-escribir_titulo <- function(wb, hoja, texto, col_ini, col_fin) {
-  wb$add_data(sheet = hoja, x = texto, start_col = col_ini, start_row = 1, col_names = FALSE)
-  wb$merge_cells(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini:col_fin))
-  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), bold = TRUE)
-  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), horizontal = "center")
-}
-
-# Escribe una tabla con encabezado en negrita en la fila 2
-escribir_tabla <- function(wb, hoja, df, col_ini) {
-  wb$add_data(sheet = hoja, x = df, start_col = col_ini, start_row = 2, na = na_strings())
-  wb$add_font(sheet = hoja, dims = wb_dims(rows = 2, cols = col_ini:(col_ini + ncol(df) - 1)),
-              bold = TRUE)
-}
-
-# Tabla de informacion de la estacion (A1:B7)
-escribir_info <- function(wb, hoja, info) {
-  escribir_titulo(wb, hoja, "Informacion de la Estación", 1, 2)
-  wb$add_data(sheet = hoja, x = info_rotulos, start_col = 1, start_row = 2, col_names = FALSE)
-  wb$add_data(sheet = hoja, x = info,         start_col = 2, start_row = 2, col_names = FALSE)
-}
-
-# Serie diaria original (D1:F...)
-escribir_serie_original <- function(wb, hoja, serie, nombre_valor) {
+# Serie diaria original (columnas FECHA, valor, Unidad)
+armar_serie_original <- function(serie, nombre_valor) {
   tabla <- serie
   names(tabla) <- c("FECHA", nombre_valor, "Unidad")
-  wb$add_data(sheet = hoja, x = tabla, start_col = 4, start_row = 1)
-  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = 4:6), bold = TRUE)
-  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(nrow(tabla) + 1), cols = 4),
-                numfmt = "dd/mm/yyyy")
-  wb$set_col_widths(sheet = hoja, cols = 1:6, widths = c(22, 28, 3, 12, 20, 10))
+  tabla
 }
 
-# Serie diaria continua (DO1:DU...): todas las fechas entre la minima y la
-# maxima de la serie original. DIA, MES, YEAR y Hydro YEAR se escriben como
-# valores (ya no como formulas). Devuelve la ultima fila escrita.
-escribir_serie_continua <- function(wb, hoja, serie, cfg, mes_inicio_hidro,
-                                    col_ini = col_serie_continua) {
+# Serie diaria continua: todas las fechas entre la minima y la maxima de la
+# serie original. DIA, MES, YEAR y Hydro YEAR se calculan aqui como valores.
+armar_serie_continua <- function(serie, cfg, mes_inicio_hidro, hoja) {
   fechas_validas <- serie$FECHA[!is.na(serie$FECHA)]
   if (length(fechas_validas) == 0) {
     stop("La pestana ", hoja, " no contiene fechas validas.")
@@ -402,117 +384,210 @@ escribir_serie_continua <- function(wb, hoja, serie, cfg, mes_inicio_hidro,
                       stringsAsFactors = FALSE)
   names(tabla) <- c("FECHA", "DIA", "MES", "YEAR", "Hydro YEAR",
                     paste(cfg$abrev, "diaria"), "Unidad")
-
-  wb$add_data(sheet = hoja, x = tabla, start_col = col_ini, start_row = 1, na = na_strings())
-  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini:(col_ini + 6)), bold = TRUE)
-  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(n_dias + 1L), cols = col_ini),
-                numfmt = "dd/mm/yyyy")
-  wb$set_col_widths(sheet = hoja, cols = col_ini:(col_ini + 6),
-                    widths = c(12, 6, 6, 8, 12, 12, 10))
-
-  n_dias + 1L
+  tabla
 }
 
-# Escribe las tablas de un periodo (calendario o hidrologico) a partir de
-# col_ini. Devuelve las columnas de inicio de cada tabla (para los graficos).
-escribir_periodo <- function(wb, hoja, res, cfg, col_ini) {
+# Arma las tablas de un periodo (calendario o hidrologico) con sus encabezados
+armar_tablas_periodo <- function(res, cfg) {
+  u <- cfg$unidad
+  t <- list()
+
+  # Cantidad de registros por mes
+  t$conteo <- data.frame(res$etiquetas, res$conteo)
+  names(t$conteo) <- c("YEAR", res$meses)
+
+  # Cantidad de meses con informacion
+  t$meses <- data.frame(YEAR = res$etiquetas, MESES = res$n_meses)
+
+  # Valores mensuales (tabla año x mes)
+  t$mensual <- data.frame(res$etiquetas, res$mensual)
+  names(t$mensual) <- c("YEAR", res$meses)
+
+  # Valores mensuales en vector
+  t$vector <- res$vector_mens
+  names(t$vector) <- c("FECHA", "MES", "YEAR", paste0(cfg$abrev, " (", u, ")"))
+
+  # Promedio mensual entre años
+  t$promedio <- data.frame(MES = res$meses, VALOR = res$prom_mensual)
+  names(t$promedio) <- c("MES", paste0(cfg$abrev, " promedio (", u, ")"))
+
+  # Resumen bajo la tabla de promedios (anual y, si corresponde, semestres)
+  t$resumen <- list(etiquetas = paste0(res$nombres_resum, " (", u, ")"),
+                    valores   = res$resumen_prom)
+
+  # Series anuales y sus promedios (estos van a la derecha de la tabla anual)
+  t$anual <- data.frame(res$etiquetas, res$anual)
+  names(t$anual) <- c("YEAR", paste0(cfg$abrev, " ", res$nombres_series, " (", u, ")"))
+
+  t$prom_anual <- as.data.frame(as.list(res$prom_anual))
+  names(t$prom_anual) <- paste0(cfg$abrev, " ", res$nombres_prom, " (", u, ")")
+
+  t
+}
+
+# --- Disposicion automatica ---
+# Un "cursor" recorre las columnas de izquierda a derecha. Cada tabla reserva
+# tantas columnas como tenga, mas la separacion, y el cursor avanza.
+nueva_disposicion <- function(col_ini = 1) {
+  disp <- new.env()
+  disp$cursor <- col_ini
+  disp
+}
+
+reservar_columnas <- function(disp, ancho, separacion = separacion_tablas) {
+  col <- disp$cursor
+  disp$cursor <- col + ancho + separacion
+  col
+}
+
+# Columnas de inicio de cada tabla de un periodo y de sus graficos
+disponer_periodo <- function(disp, tablas) {
+  pos <- list()
+  pos$conteo   <- reservar_columnas(disp, ncol(tablas$conteo))
+  pos$meses    <- reservar_columnas(disp, ncol(tablas$meses))
+  pos$mensual  <- reservar_columnas(disp, ncol(tablas$mensual))
+  pos$vector   <- reservar_columnas(disp, ncol(tablas$vector))
+  pos$promedio <- reservar_columnas(disp, ncol(tablas$promedio))
+  pos$anual    <- reservar_columnas(disp, ncol(tablas$anual) + ncol(tablas$prom_anual))
+  pos$graficos <- reservar_columnas(disp, ancho_grafico)
+  pos
+}
+
+# Orden de los bloques en la pestaña, de izquierda a derecha.
+# Para reordenar los bloques basta con cambiar el orden de estas lineas.
+disponer_hoja <- function(tabla_orig, tabla_cont, tablas_cal, tablas_hid) {
+  disp <- nueva_disposicion(col_ini = 1)
+  pos <- list()
+  pos$info           <- reservar_columnas(disp, 2)    # rotulos + valores
+  pos$serie          <- reservar_columnas(disp, ncol(tabla_orig), separacion_tras_serie)
+  pos$cal            <- disponer_periodo(disp, tablas_cal)
+  pos$hid            <- disponer_periodo(disp, tablas_hid)
+  pos$continua       <- reservar_columnas(disp, ncol(tabla_cont))
+  pos$grafico_diario <- reservar_columnas(disp, ancho_grafico_diario)
+  pos
+}
+
+# =====================================================================
+# 8. ESCRITURA EN EXCEL
+# =====================================================================
+# Los valores NA se escriben como #N/A (valor de error nativo de Excel,
+# sin formulas) mediante na = na_strings().
+
+# Escribe un titulo con celdas unidas, en negrita y centrado (fila 1)
+escribir_titulo <- function(wb, hoja, texto, col_ini, col_fin) {
+  wb$add_data(sheet = hoja, x = texto, start_col = col_ini, start_row = 1, col_names = FALSE)
+  wb$merge_cells(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini:col_fin))
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), bold = TRUE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 1, cols = col_ini), horizontal = "center")
+}
+
+# Escribe una tabla con titulo opcional (fila 1) y encabezado en negrita (fila 2)
+escribir_tabla <- function(wb, hoja, df, col_ini, titulo = NULL, col_fin_titulo = NULL) {
+  col_fin <- col_ini + ncol(df) - 1
+  if (!is.null(titulo)) {
+    escribir_titulo(wb, hoja, titulo, col_ini, if (is.null(col_fin_titulo)) col_fin else col_fin_titulo)
+  }
+  wb$add_data(sheet = hoja, x = df, start_col = col_ini, start_row = 2, na = na_strings())
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 2, cols = col_ini:col_fin), bold = TRUE)
+}
+
+# Tabla de informacion de la estacion (2 columnas: rotulos y valores)
+escribir_info <- function(wb, hoja, info, col) {
+  escribir_titulo(wb, hoja, "Informacion de la Estación", col, col + 1)
+  wb$add_data(sheet = hoja, x = info_rotulos, start_col = col,     start_row = 2, col_names = FALSE)
+  wb$add_data(sheet = hoja, x = info,         start_col = col + 1, start_row = 2, col_names = FALSE)
+  # Anchos de las 2 columnas y de la columna separadora angosta a su derecha
+  wb$set_col_widths(sheet = hoja, cols = col + 0:2, widths = c(22, 28, 3))
+}
+
+# Serie diaria original (encabezado en la fila 1)
+escribir_serie_original <- function(wb, hoja, tabla, col) {
+  wb$add_data(sheet = hoja, x = tabla, start_col = col, start_row = 1)
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col + 0:(ncol(tabla) - 1)), bold = TRUE)
+  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(nrow(tabla) + 1), cols = col),
+                numfmt = "dd/mm/yyyy")
+  wb$set_col_widths(sheet = hoja, cols = col + 0:(ncol(tabla) - 1), widths = c(12, 20, 10))
+}
+
+# Serie diaria continua (encabezado en la fila 1)
+escribir_serie_continua <- function(wb, hoja, tabla, col) {
+  wb$add_data(sheet = hoja, x = tabla, start_col = col, start_row = 1, na = na_strings())
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = col + 0:(ncol(tabla) - 1)), bold = TRUE)
+  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 2:(nrow(tabla) + 1), cols = col),
+                numfmt = "dd/mm/yyyy")
+  wb$set_col_widths(sheet = hoja, cols = col + 0:(ncol(tabla) - 1),
+                    widths = c(12, 6, 6, 8, 12, 12, 10))
+}
+
+# Escribe las tablas de un periodo (calendario o hidrologico) en las
+# posiciones calculadas por disponer_periodo()
+escribir_periodo <- function(wb, hoja, res, tablas, cfg, pos) {
 
   u          <- cfg$unidad
   sufijo     <- if (res$hidrologico) " - Año hidrologico" else " - Año calendario"
   ancho_year <- if (res$hidrologico) 10 else 8
-  n          <- length(res$etiquetas)
-  k          <- length(res$nombres_series)   # 1 (anual) o 3 (anual + 2 semestres)
-
-  pos <- list(conteo   = col_ini,
-              meses    = col_ini + 14,
-              mensual  = col_ini + 17,
-              vector   = col_ini + 31,
-              promedio = col_ini + 36,
-              anual    = col_ini + 39)
-  pos$graficos <- pos$anual + (1 + 2 * k) + 1
+  n          <- nrow(tablas$conteo)
+  k          <- ncol(tablas$anual) - 1   # 1 (anual) o 3 (anual + 2 semestres)
 
   # --- Cantidad de registros por mes ---
-  tabla_conteo <- data.frame(res$etiquetas, res$conteo)
-  names(tabla_conteo) <- c("YEAR", res$meses)
-
-  escribir_titulo(wb, hoja, paste0("Cantidad de registros por mes", sufijo),
-                  pos$conteo, pos$conteo + 12)
-  escribir_tabla(wb, hoja, tabla_conteo, pos$conteo)
-  wb$set_col_widths(sheet = hoja, cols = pos$conteo + 0:12, widths = c(ancho_year, rep(6, 12)))
+  escribir_tabla(wb, hoja, tablas$conteo, pos$conteo,
+                 paste0("Cantidad de registros por mes", sufijo))
+  wb$set_col_widths(sheet = hoja, cols = pos$conteo + 0:(ncol(tablas$conteo) - 1),
+                    widths = c(ancho_year, rep(6, ncol(tablas$conteo) - 1)))
 
   # Escala de colores: 0 = rojo, 15 = amarillo, 31 = verde oscuro
   wb$add_conditional_formatting(sheet = hoja,
-                                dims = wb_dims(rows = 3:(n + 2), cols = pos$conteo + 1:12),
+                                dims = wb_dims(rows = 3:(n + 2), cols = pos$conteo + 1:(ncol(tablas$conteo) - 1)),
                                 type = "colorScale",
                                 style = c("#F8696B", "#FFEB84", "#006400"),
                                 rule = c(0, 15, 31))
 
   # --- Cantidad de meses con informacion ---
-  tabla_meses <- data.frame(YEAR = res$etiquetas, MESES = res$n_meses)
-
-  escribir_titulo(wb, hoja, paste0("Cantidad de meses con información", sufijo),
-                  pos$meses, pos$meses + 1)
-  escribir_tabla(wb, hoja, tabla_meses, pos$meses)
+  escribir_tabla(wb, hoja, tablas$meses, pos$meses,
+                 paste0("Cantidad de meses con información", sufijo))
   wb$set_col_widths(sheet = hoja, cols = pos$meses + 0:1, widths = c(ancho_year, 8))
 
   # --- Valores mensuales (tabla año x mes) ---
-  tabla_mensual <- data.frame(res$etiquetas, res$mensual)
-  names(tabla_mensual) <- c("YEAR", res$meses)
-
-  escribir_titulo(wb, hoja, paste0(cfg$nombre_tabla, " mensual (", u, ")", sufijo),
-                  pos$mensual, pos$mensual + 12)
-  escribir_tabla(wb, hoja, tabla_mensual, pos$mensual)
-  wb$set_col_widths(sheet = hoja, cols = pos$mensual + 0:12, widths = c(ancho_year, rep(8, 12)))
+  escribir_tabla(wb, hoja, tablas$mensual, pos$mensual,
+                 paste0(cfg$nombre_tabla, " mensual (", u, ")", sufijo))
+  wb$set_col_widths(sheet = hoja, cols = pos$mensual + 0:(ncol(tablas$mensual) - 1),
+                    widths = c(ancho_year, rep(8, ncol(tablas$mensual) - 1)))
 
   # --- Valores mensuales en vector ---
-  tabla_vector <- res$vector_mens
-  names(tabla_vector) <- c("FECHA", "MES", "YEAR", paste0(cfg$abrev, " (", u, ")"))
-
-  escribir_titulo(wb, hoja, paste0(cfg$abrev, " mensual (", u, ")", sufijo),
-                  pos$vector, pos$vector + 3)
-  escribir_tabla(wb, hoja, tabla_vector, pos$vector)
-  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 3:(nrow(tabla_vector) + 2), cols = pos$vector),
+  escribir_tabla(wb, hoja, tablas$vector, pos$vector,
+                 paste0(cfg$abrev, " mensual (", u, ")", sufijo))
+  wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = 3:(nrow(tablas$vector) + 2), cols = pos$vector),
                 numfmt = "dd/mm/yyyy")
   wb$set_col_widths(sheet = hoja, cols = pos$vector + 0:3, widths = c(12, 6, ancho_year, 10))
 
-  # --- Promedio mensual entre años + resumen anual/semestral (fila 15 en adelante) ---
-  tabla_prom <- data.frame(MES = res$meses, VALOR = res$prom_mensual)
-  names(tabla_prom) <- c("MES", paste0(cfg$abrev, " promedio (", u, ")"))
+  # --- Promedio mensual entre años + resumen anual/semestral debajo ---
+  escribir_tabla(wb, hoja, tablas$promedio, pos$promedio,
+                 paste0(cfg$nombre_tabla, " promedio mensual (", u, ")", sufijo))
 
-  escribir_titulo(wb, hoja, paste0(cfg$nombre_tabla, " promedio mensual (", u, ")", sufijo),
-                  pos$promedio, pos$promedio + 1)
-  escribir_tabla(wb, hoja, tabla_prom, pos$promedio)
-
-  wb$add_data(sheet = hoja, x = paste0(res$nombres_resum, " (", u, ")"),
-              start_col = pos$promedio, start_row = 15, col_names = FALSE)
-  wb$add_data(sheet = hoja, x = res$resumen_prom,
-              start_col = pos$promedio + 1, start_row = 15, col_names = FALSE, na = na_strings())
-  wb$add_font(sheet = hoja, dims = wb_dims(rows = 15:(14 + k), cols = pos$promedio + 0:1),
+  fila_resumen <- 2 + nrow(tablas$promedio) + 1   # fila siguiente a la tabla (15)
+  wb$add_data(sheet = hoja, x = tablas$resumen$etiquetas,
+              start_col = pos$promedio, start_row = fila_resumen, col_names = FALSE)
+  wb$add_data(sheet = hoja, x = tablas$resumen$valores,
+              start_col = pos$promedio + 1, start_row = fila_resumen, col_names = FALSE,
+              na = na_strings())
+  wb$add_font(sheet = hoja,
+              dims = wb_dims(rows = fila_resumen + 0:(k - 1), cols = pos$promedio + 0:1),
               bold = TRUE)
   wb$set_col_widths(sheet = hoja, cols = pos$promedio + 0:1,
                     widths = c(if (k > 1) 28 else 20, 16))
 
-  # --- Series anuales y sus promedios ---
-  tabla_anual <- data.frame(res$etiquetas, res$anual)
-  names(tabla_anual) <- c("YEAR", paste0(cfg$abrev, " ", res$nombres_series, " (", u, ")"))
-
-  escribir_titulo(wb, hoja, paste0(cfg$abrev, " anual y promedio anual (", u, ")", sufijo),
-                  pos$anual, pos$anual + 2 * k)
-  escribir_tabla(wb, hoja, tabla_anual, pos$anual)
-
-  # Promedios: encabezado (fila 2) y un unico valor (fila 3) a la derecha de la tabla
-  tabla_prom_anual <- as.data.frame(as.list(res$prom_anual))
-  names(tabla_prom_anual) <- paste0(cfg$abrev, " ", res$nombres_prom, " (", u, ")")
-  escribir_tabla(wb, hoja, tabla_prom_anual, pos$anual + 1 + k)
-
-  wb$set_col_widths(sheet = hoja, cols = pos$anual + 0:(2 * k),
+  # --- Series anuales y, a su derecha, sus promedios (un unico valor) ---
+  ancho_total <- ncol(tablas$anual) + ncol(tablas$prom_anual)
+  escribir_tabla(wb, hoja, tablas$anual, pos$anual,
+                 paste0(cfg$abrev, " anual y promedio anual (", u, ")", sufijo),
+                 col_fin_titulo = pos$anual + ancho_total - 1)
+  escribir_tabla(wb, hoja, tablas$prom_anual, pos$anual + ncol(tablas$anual))
+  wb$set_col_widths(sheet = hoja, cols = pos$anual + 0:(ancho_total - 1),
                     widths = c(ancho_year, 14, rep(20, k - 1), 22, rep(26, k - 1)))
-
-  pos
 }
 
 # =====================================================================
-# 8. GRAFICOS (nativos de Excel, enlazados a las tablas de la pestaña)
+# 9. GRAFICOS (nativos de Excel, enlazados a las tablas de la pestaña)
 # =====================================================================
 
 # Limites del eje Y: incluye siempre el 0 y redondea a valores "bonitos"
@@ -539,32 +614,39 @@ formatear_grafico <- function(g, titulo, ylab, limites) {
   g
 }
 
-# Graficos de un periodo: promedio mensual y una serie anual por columna
-# (anual y, en el año hidrologico, los dos semestres con un eje Y comun)
-graficar_periodo <- function(wb, hoja, res, cfg, pos, nombre_estacion) {
+# Filas que ocupa el grafico numero "i" de la columna de graficos (1, 2, 3...)
+filas_grafico <- function(i) {
+  fila_ini <- 2 + (i - 1) * (alto_grafico + separacion_graficos)
+  fila_ini:(fila_ini + alto_grafico - 1)
+}
+
+# Graficos de un periodo, apilados verticalmente: promedio mensual y una serie
+# anual por columna (anual y, en el año hidrologico, los dos semestres con un
+# eje Y comun)
+graficar_periodo <- function(wb, hoja, res, tablas, cfg, pos, nombre_estacion) {
 
   u        <- cfg$unidad
-  k        <- length(res$nombres_series)
-  fila_fin <- length(res$etiquetas) + 2
-  filas_graficos <- list(2:17, 19:34, 36:51, 53:68)
-  cols_graficos  <- pos$graficos + 0:7
+  k        <- ncol(tablas$anual) - 1
+  cols_graficos <- pos$graficos + 0:(ancho_grafico - 1)
 
-  # Promedio mensual (meses y valores, filas 2 a 14)
-  datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 2:14, cols = pos$promedio + 0:1))
+  # Promedio mensual (meses y valores)
+  fila_fin <- 2 + nrow(tablas$promedio)
+  datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 2:fila_fin, cols = pos$promedio + 0:1))
   datos$MES <- as.character(datos$MES)
-  g <- ms_barchart(data = datos, x = "MES", y = names(datos)[2])
+  g <- ms_barchart(data = datos, x = "MES", y = names(tablas$promedio)[2])
   g <- formatear_grafico(g, nombre_estacion,
                          paste0(cfg$grafico_promedio_mensual, " (", u, ")"),
                          limites_eje(res$prom_mensual))
-  wb$add_mschart(sheet = hoja, dims = wb_dims(rows = filas_graficos[[1]], cols = cols_graficos),
+  wb$add_mschart(sheet = hoja, dims = wb_dims(rows = filas_grafico(1), cols = cols_graficos),
                  graph = g)
 
   # Series anuales: eje Y comun para todas (anual, semestre 1 y semestre 2)
+  fila_fin <- 2 + nrow(tablas$anual)
   limites_anual <- limites_eje(res$anual)
   for (j in seq_len(k)) {
     datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 2:fila_fin, cols = pos$anual + 0:j))
     datos <- datos[, c(1, ncol(datos))]               # columna YEAR y columna de valores
-    nombre_y <- paste0(cfg$abrev, " ", res$nombres_series[j], " (", u, ")")
+    nombre_y <- names(tablas$anual)[j + 1]
     names(datos) <- c("YEAR", nombre_y)
     datos$YEAR <- as.character(datos$YEAR)            # años como categorias (no 1, 2, 3...)
     g <- ms_barchart(data = datos, x = "YEAR", y = nombre_y)
@@ -572,18 +654,21 @@ graficar_periodo <- function(wb, hoja, res, cfg, pos, nombre_estacion) {
                            paste0(cfg$nombre_grafico, " ", res$nombres_series[j], " (", u, ")"),
                            limites_anual)
     g <- chart_ax_x(g, rotation = -90)                # texto del eje X rotado 90°
-    wb$add_mschart(sheet = hoja, dims = wb_dims(rows = filas_graficos[[j + 1]], cols = cols_graficos),
+    wb$add_mschart(sheet = hoja, dims = wb_dims(rows = filas_grafico(j + 1), cols = cols_graficos),
                    graph = g)
   }
 }
 
-# Grafico de la serie diaria continua (fechas en DO, valores en DT),
-# anclado en DW1 con tamaño 22.44 x 4.72 pulgadas
-graficar_serie_diaria <- function(wb, hoja, cfg, fila_fin, nombre_estacion,
-                                  col_ini = col_serie_continua) {
-  datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 1:fila_fin, cols = col_ini + 0:5))
+# Grafico de la serie diaria continua, con tamaño 22.44 x 4.72 pulgadas
+graficar_serie_diaria <- function(wb, hoja, cfg, tabla, col_serie, col_grafico, nombre_estacion) {
+
+  # Columnas FECHA (primera) y valor diario dentro de la serie continua
+  nombre_y  <- paste(cfg$abrev, "diaria")
+  col_valor <- col_serie + which(names(tabla) == nombre_y) - 1
+  fila_fin  <- nrow(tabla) + 1
+
+  datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 1:fila_fin, cols = col_serie:col_valor))
   datos <- datos[, c(1, ncol(datos))]
-  nombre_y <- names(datos)[2]
 
   if (cfg$grafico_diario == "barras") {
     g <- ms_barchart(data = datos, x = "FECHA", y = nombre_y)
@@ -598,16 +683,17 @@ graficar_serie_diaria <- function(wb, hoja, cfg, fila_fin, nombre_estacion,
                   major_unit = 6, major_time_unit = "months",
                   minor_unit = 1, minor_time_unit = "months")
 
-  cols_grafico <- (col_ini + 8):(col_ini + 40)       # DW:FC (33 columnas)
-  wb$set_col_widths(sheet = hoja, cols = cols_grafico, widths = rep(8.43, 33))
-  # Los offsets completan el tamaño sobre 33 columnas de 64 px y 21 filas de 16 pt.
-  wb$add_mschart(sheet = hoja, dims = wb_dims(rows = 1:21, cols = cols_grafico), graph = g,
-                 col_offset = c(0, 22.44 * 914400 - 33 * 64 * 9525),
-                 row_offset = c(0, 4.72 * 914400 - 21 * 16 * 12700))
+  cols_grafico <- col_grafico + 0:(ancho_grafico_diario - 1)
+  wb$set_col_widths(sheet = hoja, cols = cols_grafico, widths = rep(8.43, ancho_grafico_diario))
+  # Los offsets completan el tamaño sobre columnas de 64 px y filas de 16 pt.
+  wb$add_mschart(sheet = hoja, dims = wb_dims(rows = 1:alto_grafico_diario, cols = cols_grafico),
+                 graph = g,
+                 col_offset = c(0, 22.44 * 914400 - ancho_grafico_diario * 64 * 9525),
+                 row_offset = c(0, 4.72 * 914400 - alto_grafico_diario * 16 * 12700))
 }
 
 # =====================================================================
-# 9. PROCESAMIENTO DE UNA PLANILLA
+# 10. PROCESAMIENTO DE UNA PLANILLA
 # =====================================================================
 procesar_archivo <- function(file_xlsx, codigo) {
 
@@ -645,18 +731,26 @@ procesar_archivo <- function(file_xlsx, codigo) {
                                 mes_inicio = mes_inicio_hidro, agregacion = cfg$agregacion,
                                 hidrologico = TRUE)
 
+    # --- Armado de tablas y disposicion ---
+    tabla_orig <- armar_serie_original(datos$serie, datos$nombre_valor)
+    tabla_cont <- armar_serie_continua(datos$serie, cfg, mes_inicio_hidro, hoja)
+    tablas_cal <- armar_tablas_periodo(res_cal, cfg)
+    tablas_hid <- armar_tablas_periodo(res_hid, cfg)
+    pos        <- disponer_hoja(tabla_orig, tabla_cont, tablas_cal, tablas_hid)
+
     # --- Escritura ---
     wb$add_worksheet(hoja)
-    escribir_info(wb, hoja, datos$info)
-    escribir_serie_original(wb, hoja, datos$serie, datos$nombre_valor)
-    fila_fin_diaria <- escribir_serie_continua(wb, hoja, datos$serie, cfg, mes_inicio_hidro)
-    pos_cal <- escribir_periodo(wb, hoja, res_cal, cfg, col_bloque_calendario)
-    pos_hid <- escribir_periodo(wb, hoja, res_hid, cfg, col_bloque_hidro)
+    escribir_info(wb, hoja, datos$info, pos$info)
+    escribir_serie_original(wb, hoja, tabla_orig, pos$serie)
+    escribir_serie_continua(wb, hoja, tabla_cont, pos$continua)
+    escribir_periodo(wb, hoja, res_cal, tablas_cal, cfg, pos$cal)
+    escribir_periodo(wb, hoja, res_hid, tablas_hid, cfg, pos$hid)
 
     # --- Graficos ---
-    graficar_periodo(wb, hoja, res_cal, cfg, pos_cal, nombre_estacion)
-    graficar_periodo(wb, hoja, res_hid, cfg, pos_hid, nombre_estacion)
-    graficar_serie_diaria(wb, hoja, cfg, fila_fin_diaria, nombre_estacion)
+    graficar_periodo(wb, hoja, res_cal, tablas_cal, cfg, pos$cal, nombre_estacion)
+    graficar_periodo(wb, hoja, res_hid, tablas_hid, cfg, pos$hid, nombre_estacion)
+    graficar_serie_diaria(wb, hoja, cfg, tabla_cont, pos$continua, pos$grafico_diario,
+                          nombre_estacion)
   }
 
   # Sobrescribe solo el archivo de esta variable. Si esta abierto en Excel,
@@ -675,7 +769,7 @@ procesar_archivo <- function(file_xlsx, codigo) {
 }
 
 # =====================================================================
-# 10. ITERACION SOBRE LAS PLANILLAS DE INPUTS
+# 11. ITERACION SOBRE LAS PLANILLAS DE INPUTS
 # =====================================================================
 archivos <- list.files(dir_inputs, pattern = "\\.xlsx$", full.names = TRUE)
 archivos <- archivos[!grepl("^~\\$", basename(archivos))]  # ignora temporales de Excel

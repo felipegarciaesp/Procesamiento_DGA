@@ -55,11 +55,34 @@ El script `Procesamiento_DGA.R` está organizado en secciones:
 4. **Cálculo**: `calcular_periodo()` calcula todas las tablas de un periodo
    anual. Se usa dos veces por estación: año calendario (mes de inicio ENE) y año
    hidrológico (mes de inicio configurado, con sus dos semestres).
-5. **Escritura en Excel** y **gráficos**, en funciones separadas.
+5. **Armado de tablas y disposición**: todas las tablas se arman primero como
+   data.frames y luego se calcula automáticamente dónde va cada una (ver
+   "Disposición automática de las tablas").
+6. **Escritura en Excel** y **gráficos**, en funciones separadas.
 
 Se genera un archivo `Resumen_<VARIABLE>.xlsx` por planilla procesada
 (por ejemplo, `Resumen_PP.xlsx`). Ver la sección "Importante" al inicio de
 este documento.
+
+### Disposición automática de las tablas
+
+Las tablas y gráficos de cada pestaña se ubican automáticamente de izquierda a
+derecha, uno a continuación del otro, según el ancho real de cada tabla. No hay
+letras de columna fijas en el código: si se agrega, quita o ensancha una tabla,
+las demás se desplazan solas y los gráficos siguen apuntando a las celdas
+correctas.
+
+- El orden de los bloques se define en `disponer_hoja()` (información de la
+  estación, serie original, bloque año calendario, bloque año hidrológico, serie
+  continua y gráfico diario).
+- Dentro de cada bloque de periodo, el orden se define en `disponer_periodo()`.
+- Las separaciones y tamaños (columnas entre tablas, ancho y alto de los
+  gráficos) se configuran en la sección 3 del script (`separacion_tablas`,
+  `separacion_tras_serie`, `ancho_grafico`, `alto_grafico`, etc.).
+
+Con la configuración actual, la disposición resultante es la misma de siempre:
+el bloque año calendario parte en la columna K, el año hidrológico en BK, la
+serie continua en DO y el gráfico diario en DW.
 
 ### Agregación según la variable
 
@@ -77,7 +100,7 @@ sin fórmulas).
 
 ### Serie diaria continua
 
-En cada pestaña de estación, las columnas DO:DU contienen una serie diaria
+En cada pestaña de estación, las columnas DO:DU (con la disposición actual) contienen una serie diaria
 continua desde la fecha mínima hasta la máxima de la serie original de D:F,
 incluyendo las fechas sin valor. Los encabezados son FECHA, DIA, MES, YEAR,
 Hydro YEAR, `<variable> diaria` (por ejemplo, Pp diaria) y Unidad.
