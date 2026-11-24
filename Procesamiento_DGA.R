@@ -34,9 +34,21 @@ if (mes_fin_hidro != ((mes_inicio_hidro + 10) %% 12) + 1) {
 
 ## Variables a procesar
 #-------------------
-# Codigos definidos en config_variables (seccion 2). Solo se procesan las
-# planillas de Inputs cuya variable este en este vector.
-# Ejemplo: c("PP", "TMEDIA", "TMAX", "TMIN")
+# IMPORTANTE: en este vector deben ir SIEMPRE TODAS las variables que se
+# quieren procesar en esta ejecucion. Solo se procesan las planillas de
+# Inputs cuya variable este aqui; las demas se omiten.
+#
+#   - Cada variable procesada genera (o sobrescribe) su archivo en Outputs:
+#     "PP" -> Resumen_PP.xlsx, "TMEDIA" -> Resumen_TMEDIA.xlsx, etc.
+#   - Los archivos de las variables que NO estan en el vector NO se borran ni
+#     se actualizan: quedan tal como estaban de una ejecucion anterior.
+#   - Si se cambia algo que afecta a todas las variables (por ejemplo, el año
+#     hidrologico o el formato de las tablas), se deben incluir TODAS las
+#     variables en el vector. Si no, en Outputs quedaran archivos generados
+#     con configuraciones distintas.
+#
+# Codigos disponibles: los nombres de config_variables (seccion 2).
+# Ejemplo con todas las variables: c("PP", "TMEDIA", "TMAX", "TMIN")
 variables_a_procesar <- c("PP")
 
 ## Directorio de trabajo
@@ -45,10 +57,12 @@ setwd("C:/Codigos/Procesamiento_DGA")
 dir_inputs  <- file.path(getwd(), "Inputs")
 dir_outputs <- file.path(getwd(), "Outputs")
 
-## Carpeta de salida (se recrea en cada ejecucion)
+## Carpeta de salida
 #-------------------
-if (dir.exists(dir_outputs)) unlink(dir_outputs, recursive = TRUE)  # borra resultados anteriores
-dir.create(dir_outputs, recursive = TRUE)
+# La carpeta Outputs NO se borra: se crea solo si no existe. Cada variable
+# procesada sobrescribe unicamente su propio archivo Resumen_<VARIABLE>.xlsx
+# (ver "Variables a procesar" arriba).
+if (!dir.exists(dir_outputs)) dir.create(dir_outputs, recursive = TRUE)
 
 # =====================================================================
 # 2. CONFIGURACION POR VARIABLE
@@ -645,8 +659,18 @@ procesar_archivo <- function(file_xlsx, codigo) {
     graficar_serie_diaria(wb, hoja, cfg, fila_fin_diaria, nombre_estacion)
   }
 
+  # Sobrescribe solo el archivo de esta variable. Si esta abierto en Excel,
+  # Windows no permite reemplazarlo: se avisa con un mensaje claro.
   archivo_salida <- paste0("Resumen_", codigo, ".xlsx")
-  wb$save(file.path(dir_outputs, archivo_salida), overwrite = TRUE)
+  ruta_salida    <- file.path(dir_outputs, archivo_salida)
+  tryCatch(
+    wb$save(ruta_salida, overwrite = TRUE),
+    error = function(e) {
+      stop("No se pudo guardar ", archivo_salida,
+           ". Si esta abierto en Excel, cierrelo y vuelva a ejecutar el codigo.\n",
+           "Detalle: ", conditionMessage(e), call. = FALSE)
+    }
+  )
   message("Archivo generado: ", archivo_salida)
 }
 
@@ -675,6 +699,14 @@ for (file_xlsx in archivos) {
   t_ini <- Sys.time()
   procesar_archivo(file_xlsx, codigo)
   message("  Tiempo: ", round(as.numeric(difftime(Sys.time(), t_ini, units = "secs")), 1), " s")
+}
+
+# Aviso si alguna variable de variables_a_procesar no tiene planilla en Inputs
+codigos_en_inputs <- vapply(basename(archivos), identificar_variable, character(1))
+sin_planilla <- setdiff(variables_a_procesar, codigos_en_inputs)
+if (length(sin_planilla) > 0) {
+  warning("Variables en variables_a_procesar sin planilla en Inputs: ",
+          paste(sin_planilla, collapse = ", "), call. = FALSE)
 }
 
 message("El codigo ha terminado.")

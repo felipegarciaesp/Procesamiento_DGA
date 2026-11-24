@@ -1,12 +1,51 @@
 # Procesamiento_DGA
 Codigo para procesar los datos de estaciones DGA. Este codigo toma como inputs los outputs del codigo Datos_DGA
 
+## ⚠️ Importante: variables a procesar y carpeta Outputs
+
+Al inicio del script está el vector `variables_a_procesar`:
+
+```r
+variables_a_procesar <- c("PP")
+```
+
+**En este vector deben ir siempre TODAS las variables que se quieren procesar
+en cada ejecución.** Por ejemplo, para procesar todo:
+
+```r
+variables_a_procesar <- c("PP", "TMEDIA", "TMAX", "TMIN")
+```
+
+Cómo funciona la carpeta `Outputs`:
+
+- La carpeta **no se borra** al ejecutar el código; se crea solo si no existe.
+- Cada variable del vector genera o **sobrescribe** su propio archivo:
+  `"PP"` → `Resumen_PP.xlsx`, `"TMEDIA"` → `Resumen_TMEDIA.xlsx`, etc.
+- Los archivos de las variables que **no** están en el vector **no se tocan**:
+  quedan tal como estaban de una ejecución anterior.
+
+Por lo tanto:
+
+- Para reprocesar solo una variable (por ejemplo, tras corregir algo de
+  temperatura), basta con dejar solo esa variable en el vector; las demás
+  conservan su archivo.
+- **Si se cambia algo que afecta a todas las variables** (por ejemplo, el año
+  hidrológico `mes_inicio_hidro` / `mes_fin_hidro`, o el formato de las tablas o
+  gráficos), **se deben incluir todas las variables en el vector**. De lo
+  contrario, en `Outputs` quedarán archivos generados con configuraciones
+  distintas.
+- Si un `Resumen_*.xlsx` está abierto en Excel, Windows no permite
+  sobrescribirlo y el código se detiene con un mensaje: hay que cerrarlo y
+  volver a ejecutar.
+- Si una variable del vector no tiene planilla en `Inputs`, el código lo avisa
+  al terminar.
+
 ## Estructura del código
 
 El script `Procesamiento_DGA.R` está organizado en secciones:
 
 1. **Configuración del usuario**: año hidrológico (`mes_inicio_hidro`, `mes_fin_hidro`)
-   y variables a procesar (`variables_a_procesar`).
+   y variables a procesar (`variables_a_procesar`, ver sección "Importante").
 2. **Configuración por variable** (`config_variables`): para cada variable se
    define cómo reconocer su planilla en `Inputs`, la columna de valores, el tipo
    de agregación (`"suma"` o `"promedio"`), la unidad y los rótulos de tablas y
@@ -19,7 +58,8 @@ El script `Procesamiento_DGA.R` está organizado en secciones:
 5. **Escritura en Excel** y **gráficos**, en funciones separadas.
 
 Se genera un archivo `Resumen_<VARIABLE>.xlsx` por planilla procesada
-(por ejemplo, `Resumen_PP.xlsx`).
+(por ejemplo, `Resumen_PP.xlsx`). Ver la sección "Importante" al inicio de
+este documento.
 
 ### Agregación según la variable
 
