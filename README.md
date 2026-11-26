@@ -96,6 +96,32 @@ serie continua en DO y el gráfico diario en DW.
 Los valores sin datos se escriben en Excel como `#N/A` (valor de error nativo,
 sin fórmulas).
 
+## Pestaña "Resumen"
+
+Es la **primera pestaña** de cada `Resumen_<VARIABLE>.xlsx` y da una vista global de la
+disponibilidad de datos de todas las estaciones. Se arma con lo ya calculado (no se
+vuelve a leer ninguna pestaña). De izquierda a derecha:
+
+1. **Tabla de estaciones**: ID (`E1`, `E2`… = nombre de su pestaña), nombre, código,
+   coordenadas UTM, altitud y periodo de registro (`mes/año - mes/año`).
+2. **Días con dato por año**, agrupados por década, con escala de color
+   (rojo = 0 días, amarillo = 183, verde = 366). Abajo, la misma tabla en **año hidrológico**.
+3. **Meses con dato por año**, también por década, con semáforo y su misma versión
+   en año hidrológico justo debajo. La celda queda vacía si no hay datos.
+   La leyenda (al final) indica:
+   - 🟢 12 meses: año completo
+   - 🟡 ≥ 7 meses con información
+   - 🔴 < 7 meses con información
+   - vacío: sin información
+
+Notas:
+- Los años parten en `anio_inicio_resumen` (por defecto 1960, sección 1 del código);
+  si alguna estación tiene datos anteriores, la tabla se extiende hacia atrás.
+- El último año es el último con datos entre todas las estaciones. En año hidrológico
+  cada columna se ubica bajo el año en que termina (1959/60 bajo 1960), y el último es
+  el último año hidrológico con datos (por ejemplo 2025/26 si los datos terminan en feb-2026).
+- Las tablas se ubican automáticamente según la cantidad de estaciones y años.
+
 ## Planilla de criterios
 
 Junto a cada `Resumen_<VARIABLE>.xlsx` se genera `Criterios_<VARIABLE>.xlsx`
