@@ -96,6 +96,56 @@ serie continua en DO y el gráfico diario en DW.
 Los valores sin datos se escriben en Excel como `#N/A` (valor de error nativo,
 sin fórmulas).
 
+## Planilla de criterios
+
+Junto a cada `Resumen_<VARIABLE>.xlsx` se genera `Criterios_<VARIABLE>.xlsx`
+(por ejemplo, `Criterios_PP.xlsx`) con una pestaña por estación, igual a las de
+Resumen (si una estación no aparece en Resumen, tampoco en Criterios). El
+usuario la completa tras revisar los resultados y un código posterior (aún sin
+nombre) la usará junto con Resumen para generar la planilla filtrada.
+
+**Importante: el archivo no se sobrescribe.** Si `Criterios_PP.xlsx` ya existe,
+el código lo deja tal cual para no perder lo que el usuario ya ingresó. Para
+regenerarlo (por ejemplo, si cambian las estaciones o el formato) hay que
+borrar el archivo y volver a ejecutar.
+
+| Columna | Encabezado | Contenido |
+|---|---|---|
+| A, B | Año inicio / Año fin | Periodo de análisis (años calendario, inclusive). Vacío = toda la serie. |
+| D | Dias minimos | Un número. Días con dato que debe tener un mes para ser válido; si tiene menos, se descartan todos sus datos. |
+| E | Meses a aplicar | Números de mes (1-12), uno por fila, donde aplica "Dias minimos". Vacío = no se aplica el filtro. |
+| F | Meses minimos para anual | Un número. Mínimo de meses válidos para calcular el valor anual; si no se alcanza, el anual queda `#N/A`. Vacío = sin mínimo (se ignoran los `#N/A`). |
+| G | Meses obligatorios para anual | Números de mes (1-12), uno por fila, que deben tener valor para calcular el anual; si falta alguno, queda `#N/A`. Vacío = da lo mismo cuáles meses estén completos. |
+| I | Fechas a eliminar | Fechas puntuales (dd/mm/yyyy), una por fila. |
+| J, K | Rango: inicio / Rango: fin | Periodo a eliminar (inclusive). |
+| L | Comentario | Motivo de la eliminación, para mantener la trazabilidad. |
+
+Cómo completarla:
+
+- Los datos de las columnas D a G son criterios de la estación: "Dias minimos"
+  y "Meses minimos para anual" van en la fila 2; los meses, uno por fila hacia
+  abajo.
+- En I:L cada fila es una eliminación: una fecha puntual (I) o un rango (J y K),
+  con su comentario en L.
+- F y G pueden usarse juntas: el valor anual se calcula solo si se cumplen
+  ambas condiciones. G puede quedar vacía sin problema.
+
+Reglas para el código que use esta planilla:
+
+1. **Orden del filtro:** primero se eliminan fechas puntuales y rangos, y
+   después se cuentan los días del mes (si se eliminan 12 datos de un mes y
+   quedan 18 días, el mes se descarta con un mínimo de 20).
+2. Un dato eliminado queda como faltante (`#N/A`), no como 0.
+3. Los criterios del valor anual (F y G) se aplican igual al año calendario y
+   al hidrológico, sobre los meses que queden válidos tras el paso 1.
+4. **Periodo de análisis y año hidrológico:** al indicar los años X e Y se
+   entiende que se quiere analizar desde enero de X hasta diciembre de Y. Para
+   el año hidrológico se toman entonces todos los años hidrológicos que
+   contienen esos meses: el primero es X-1/X y el último Y/Y+1. Ejemplo con
+   ABR-MAR: el periodo 1980-2026 se analiza como 1979/80 a 2026/27 (enero de
+   1980 pertenece al año hidrológico 1979/80 y diciembre de 2026 al 2026/27).
+   Si el año hidrológico comenzara en enero, no habría desfase.
+
 ## Supuestos de funcionamiento
 
 ### Serie diaria continua
