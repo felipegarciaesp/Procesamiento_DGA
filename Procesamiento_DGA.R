@@ -904,7 +904,20 @@ escribir_tabla_resumen <- function(wb, hoja, fila, col_etq, col_ini, etq_filas,
   wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = fila, cols = cols),
                     horizontal = "center", vertical = "bottom", text_rotation = 90)
   if (tipo == "meses") valores[valores == 0] <- NA
-  wb$add_data(sheet = hoja, x = valores, start_col = col_ini, start_row = f_ini, col_names = FALSE)
+  # Las celdas sin dato (NA) no se escriben, para que queden realmente vacias
+  if (tipo == "dias") {
+    wb$add_data(sheet = hoja, x = valores, start_col = col_ini, start_row = f_ini, col_names = FALSE)
+  } else {
+    for (i in seq_len(nrow(valores))) {
+      ok <- which(!is.na(valores[i, ]))
+      if (length(ok) == 0) next
+      pos <- split(ok, cumsum(c(1, diff(ok) != 1)))   # tramos contiguos
+      for (p in pos) {
+        wb$add_data(sheet = hoja, x = matrix(valores[i, p], nrow = 1), start_col = col_ini + p[1] - 1,
+                    start_row = f_ini + i - 1, col_names = FALSE)
+      }
+    }
+  }
   wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = f_ini:f_fin, cols = cols),
                     horizontal = "center")
 
