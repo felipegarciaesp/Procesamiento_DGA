@@ -693,6 +693,128 @@ graficar_serie_diaria <- function(wb, hoja, cfg, tabla, col_serie, col_grafico, 
 }
 
 # =====================================================================
+# 9b. PLANILLA DE CRITERIOS (Criterios_<VARIABLE>.xlsx)
+# =====================================================================
+# Planilla que completa el usuario DESPUES de revisar Resumen_<VARIABLE>.xlsx.
+# Un codigo posterior leera Resumen + Criterios y generara la planilla filtrada.
+#
+# Tiene una pestaña por estacion, con el mismo nombre que en Resumen (si una
+# estacion no esta en Resumen, tampoco esta en Criterios). Columnas:
+#
+#   A  "Año inicio" / B "Año fin"      : periodo de analisis (años calendario,
+#                                        inclusive). Se analiza desde enero del
+#                                        año de inicio hasta diciembre del año
+#                                        final. Vacio = toda la serie.
+#   D  "Dias minimos"                  : un solo numero (fila 2). Dias con dato
+#                                        que debe tener un mes para ser valido.
+#                                        Si tiene menos, se descartan TODOS los
+#                                        datos de ese mes.
+#   E  "Meses a aplicar"               : numeros de mes (1-12), uno por fila,
+#                                        en los que aplica "Dias minimos".
+#                                        Vacio = no se aplica el filtro.
+#   F  "Meses minimos para anual"      : un solo numero (fila 2). Cantidad
+#                                        minima de meses validos para calcular
+#                                        el valor anual; si no, queda #N/A.
+#                                        Vacio = no se exige minimo (el anual se
+#                                        calcula ignorando los #N/A).
+#   G  "Meses obligatorios para anual" : numeros de mes (1-12), uno por fila.
+#                                        Todos deben tener valor para calcular el
+#                                        valor anual; si falta alguno, queda #N/A.
+#                                        Vacio = da lo mismo cuales meses esten
+#                                        completos. (F y G se pueden usar juntas:
+#                                        el anual se calcula solo si se cumplen ambas.)
+#   I  "Fechas a eliminar"             : fechas puntuales (dd/mm/yyyy), una por fila.
+#   J  "Rango: inicio" / K "Rango: fin": periodo completo a eliminar (inclusive).
+#   L  "Comentario"                    : motivo de la eliminacion (trazabilidad).
+#
+# En I:L cada fila es UNA eliminacion: o bien una fecha puntual (I) o bien un
+# rango (J y K), con su comentario en L.
+#
+# NOTAS PARA EL CODIGO QUE USE ESTA PLANILLA:
+#   1. Orden del filtro: primero se eliminan las fechas puntuales y los rangos
+#      y RECIEN DESPUES se cuentan los dias del mes. Ej.: si en un mes se
+#      eliminan 12 datos anomalos y quedan 18 dias, ese mes queda descartado
+#      por el minimo de 20.
+#   2. Un dato eliminado queda como faltante (#N/A), NO como 0.
+#   3. Los criterios del valor anual (F y G) se evaluan sobre los meses que
+#      queden validos despues del paso 1, y se aplican igual al año calendario
+#      y al año hidrologico (en este ultimo, los meses son los del año hidrologico).
+#   4. Periodo de analisis (A y B): corresponde a enero del año de inicio hasta
+#      diciembre del año final. Para el año hidrologico (con el ejemplo ABR-MAR),
+#      el primer año hidrologico es X-1/X y el ultimo es Y/Y+1; ej.: 1980-2026
+#      -> 1979/80 a 2026/27. En general, se incluyen los años hidrologicos que
+#      contienen algun mes del periodo; si mes_inicio_hidro = 1 no hay desfase.
+#
+# Si Criterios_<VARIABLE>.xlsx ya existe NO se sobrescribe, para no perder lo
+# que el usuario haya ingresado. Para regenerarlo, borrar el archivo.
+crear_criterios <- function(codigo, hojas) {
+
+  archivo <- paste0("Criterios_", codigo, ".xlsx")
+  ruta    <- file.path(dir_outputs, archivo)
+
+  if (file.exists(ruta)) {
+    message("Se mantiene ", archivo, " existente (no se sobrescribe).")
+    return(invisible(NULL))
+  }
+
+  encabezados <- c(A = "Año inicio",
+                   B = "Año fin",
+                   D = "Dias minimos",
+                   E = "Meses a aplicar",
+                   F = "Meses minimos para anual",
+                   G = "Meses obligatorios para anual",
+                   I = "Fechas a eliminar",
+                   J = "Rango: inicio",
+                   K = "Rango: fin",
+                   L = "Comentario")
+  columnas <- match(names(encabezados), LETTERS)
+  anchos   <- c(12, 12, 3, 14, 17, 26, 30, 3, 18, 15, 15, 45)
+  filas_validacion <- 2:1001
+
+  validar_entero <- function(wb, hoja, filas, col, minimo, maximo, titulo, mensaje) {
+    wb$add_data_validation(sheet = hoja, dims = wb_dims(rows = filas, cols = col),
+                           type = "whole", operator = "between",
+                           value = c(minimo, maximo),
+                           error_title = titulo, error = mensaje)
+  }
+
+  wb <- wb_workbook()
+  for (hoja in hojas) {
+    wb$add_worksheet(hoja)
+    for (k in seq_along(encabezados)) {
+      wb$add_data(sheet = hoja, x = encabezados[[k]], start_col = columnas[k],
+                  start_row = 1, col_names = FALSE)
+    }
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = 1, cols = columnas), bold = TRUE)
+    wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 1, cols = columnas),
+                      horizontal = "center", wrap_text = TRUE)
+    wb$set_col_widths(sheet = hoja, cols = 1:12, widths = anchos)
+    wb$add_numfmt(sheet = hoja, dims = wb_dims(rows = filas_validacion, cols = 9:11),
+                  numfmt = "dd/mm/yyyy")
+    wb$freeze_pane(sheet = hoja, first_row = TRUE)
+
+    # Validaciones de entrada
+    validar_entero(wb, hoja, 2, 1:2, 1800, 2200, "Año no valido",
+                   "Ingrese un año de 4 digitos (por ejemplo, 1980).")
+    validar_entero(wb, hoja, 2, 4, 1, 31, "Valor no valido",
+                   "Ingrese un numero entero de dias (1 a 31).")
+    validar_entero(wb, hoja, filas_validacion, 5, 1, 12, "Mes no valido",
+                   "Ingrese el numero de mes (1 a 12).")
+    validar_entero(wb, hoja, 2, 6, 1, 12, "Valor no valido",
+                   "Ingrese un numero entero de meses (1 a 12).")
+    validar_entero(wb, hoja, filas_validacion, 7, 1, 12, "Mes no valido",
+                   "Ingrese el numero de mes (1 a 12).")
+  }
+
+  tryCatch(
+    wb$save(ruta, overwrite = TRUE),
+    error = function(e) {
+      stop("No se pudo guardar ", archivo, ": ", conditionMessage(e), call. = FALSE)
+    }
+  )
+  message("Archivo generado: ", archivo)
+}
+# =====================================================================
 # 10. PROCESAMIENTO DE UNA PLANILLA
 # =====================================================================
 procesar_archivo <- function(file_xlsx, codigo) {
@@ -705,6 +827,7 @@ procesar_archivo <- function(file_xlsx, codigo) {
   df_estaciones <- wb_to_df(wb_in, sheet = "Estaciones")
 
   wb <- wb_workbook()
+  hojas_resumen <- character(0)  # pestañas efectivamente escritas en Resumen
 
   for (i in seq_len(nrow(df_estaciones))) {
 
@@ -740,6 +863,7 @@ procesar_archivo <- function(file_xlsx, codigo) {
 
     # --- Escritura ---
     wb$add_worksheet(hoja)
+    hojas_resumen <- c(hojas_resumen, hoja)
     escribir_info(wb, hoja, datos$info, pos$info)
     escribir_serie_original(wb, hoja, tabla_orig, pos$serie)
     escribir_serie_continua(wb, hoja, tabla_cont, pos$continua)
@@ -766,6 +890,8 @@ procesar_archivo <- function(file_xlsx, codigo) {
     }
   )
   message("Archivo generado: ", archivo_salida)
+
+  crear_criterios(codigo, hojas_resumen)
 }
 
 # =====================================================================
