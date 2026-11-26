@@ -32,6 +32,14 @@ if (mes_fin_hidro != ((mes_inicio_hidro + 10) %% 12) + 1) {
   stop("mes_fin_hidro debe ser el mes anterior a mes_inicio_hidro (el año hidrologico debe tener 12 meses).")
 }
 
+## Pestaña "Resumen"
+#-------------------
+# Primer año que muestran las tablas de la pestaña Resumen (dias y meses con
+# datos por año). Si alguna estacion tiene datos anteriores, el rango se
+# extiende automaticamente hasta ese año. El ultimo año se determina a partir
+# de los datos de todas las estaciones.
+anio_inicio_resumen <- 1960
+
 ## Variables a procesar
 #-------------------
 # IMPORTANTE: en este vector deben ir SIEMPRE TODAS las variables que se
@@ -321,6 +329,7 @@ calcular_periodo <- function(fechas, valores, mes_inicio, agregacion, hidrologic
                             VALOR = as.numeric(t(mensual)))
 
   list(hidrologico    = hidrologico,
+       anios          = anios,
        etiquetas      = etiquetas,
        meses          = meses,
        conteo         = conteo,
@@ -815,6 +824,213 @@ crear_criterios <- function(codigo, hojas) {
   message("Archivo generado: ", archivo)
 }
 # =====================================================================
+# 9c. PESTAÑA "Resumen" (primera pestaña de Resumen_<VARIABLE>.xlsx)
+# =====================================================================
+# Contiene, de izquierda a derecha:
+#   - Tabla de estaciones (ID, nombre, codigo, coordenadas, altitud y periodo
+#     de registro). El ID es el nombre de la pestaña de cada estacion.
+#   - Dias con dato por año, en año calendario y, justo debajo, en año
+#     hidrologico (escala de color rojo-amarillo-verde de 0 a 366 dias).
+#   - Meses con dato por año, tambien en año calendario y año hidrologico
+#     (semaforo: verde = 12 meses, amarillo >= 7, rojo < 7, vacio = sin datos)
+#     y su leyenda al final.
+#
+# Todo se arma a partir de lo que ya se calculo para cada estacion (no se
+# vuelve a leer ninguna pestaña). Las columnas se ubican automaticamente.
+# En el año hidrologico, cada columna queda bajo el año calendario en que
+# termina (1959/60 bajo 1960). Su ultimo año es el ultimo con datos.
+
+# Datos de una estacion para la pestaña Resumen
+datos_resumen_estacion <- function(hoja, nombre_estacion, datos, res_cal, res_hid) {
+  validas <- datos$serie$FECHA[!is.na(datos$serie$FECHA) & !is.na(datos$serie$VALOR)]
+  f <- range(validas)
+  mes_anio <- function(x) paste0(as.integer(format(x, "%m")), "/", format(x, "%Y"))
+  list(id      = hoja,
+       nombre  = nombre_estacion,
+       codigo  = datos$info[2],
+       este    = datos$info[4],
+       norte   = datos$info[5],
+       altitud = datos$info[6],
+       periodo = paste(mes_anio(f[1]), "-", mes_anio(f[2])),
+       cal = list(anios = res_cal$anios, dias = rowSums(res_cal$conteo), meses = res_cal$n_meses),
+       hid = list(anios = res_hid$anios, dias = rowSums(res_hid$conteo), meses = res_hid$n_meses))
+}
+
+# Matriz estaciones x años (0 donde la estacion no tiene datos)
+matriz_resumen <- function(est, periodo, campo, anios_cols) {
+  m <- matrix(0L, nrow = length(est), ncol = length(anios_cols))
+  for (i in seq_along(est)) {
+    r   <- est[[i]][[periodo]]
+    pos <- match(r$anios, anios_cols)
+    ok  <- !is.na(pos)
+    m[i, pos[ok]] <- as.integer(r[[campo]][ok])
+  }
+  m
+}
+
+# Convierte a numero si todos los valores lo permiten; si no, deja el texto
+columna_numerica <- function(x) {
+  v <- suppressWarnings(as.numeric(x))
+  if (all(!is.na(v) | is.na(x))) v else x
+}
+
+# Escribe una tabla estaciones x años con encabezados por decada.
+#   tipo = "dias"  -> escala de color de 0 a 366
+#   tipo = "meses" -> semaforo; las celdas con 0 quedan vacias
+escribir_tabla_resumen <- function(wb, hoja, fila, col_etq, col_ini, etq_filas,
+                                   etq_anios, decadas, valores, titulo, tipo) {
+  n <- length(etq_filas)
+  k <- length(etq_anios)
+  f_hdr <- fila + 1
+  f_ini <- fila + 2
+  f_fin <- fila + 1 + n
+  cols  <- col_ini + 0:(k - 1)
+
+  # Titulo y rotulos de la columna de estaciones
+  wb$add_data(sheet = hoja, x = titulo, start_col = col_etq, start_row = fila, col_names = FALSE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = fila, cols = col_etq),
+                    horizontal = "center", vertical = "bottom", wrap_text = TRUE)
+  wb$add_data(sheet = hoja, x = "Estación", start_col = col_etq, start_row = f_hdr, col_names = FALSE)
+  wb$add_data(sheet = hoja, x = etq_filas,  start_col = col_etq, start_row = f_ini, col_names = FALSE)
+  wb$add_font(sheet = hoja, dims = wb_dims(rows = c(fila, f_hdr), cols = col_etq), bold = TRUE)
+  wb$set_col_widths(sheet = hoja, cols = col_etq, widths = max(12, nchar(etq_filas)) + 2)
+  wb$add_border(sheet = hoja, dims = wb_dims(rows = f_hdr:f_fin, cols = col_etq),
+                top_border = "medium", bottom_border = "medium",
+                left_border = "medium", right_border = "medium", inner_hgrid = "thin")
+
+  # Fila de años (rotados) y valores
+  wb$add_data(sheet = hoja, x = matrix(etq_anios, nrow = 1), start_col = col_ini,
+              start_row = fila, col_names = FALSE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = fila, cols = cols),
+                    horizontal = "center", vertical = "bottom", text_rotation = 90)
+  if (tipo == "meses") valores[valores == 0] <- NA
+  wb$add_data(sheet = hoja, x = valores, start_col = col_ini, start_row = f_ini, col_names = FALSE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = f_ini:f_fin, cols = cols),
+                    horizontal = "center")
+
+  # Una caja por decada, con su rotulo "primer año-ultimo año"
+  r <- rle(decadas)
+  fin_g <- cumsum(r$lengths)
+  ini_g <- fin_g - r$lengths + 1
+  for (g in seq_along(r$lengths)) {
+    cols_g <- col_ini + (ini_g[g] - 1):(fin_g[g] - 1)
+    rotulo <- if (r$lengths[g] > 1) paste0(etq_anios[ini_g[g]], "-", etq_anios[fin_g[g]]) else
+      as.character(etq_anios[ini_g[g]])
+    wb$add_data(sheet = hoja, x = rotulo, start_col = cols_g[1], start_row = f_hdr, col_names = FALSE)
+    if (length(cols_g) > 1) wb$merge_cells(sheet = hoja, dims = wb_dims(rows = f_hdr, cols = cols_g))
+    wb$add_font(sheet = hoja, dims = wb_dims(rows = f_hdr, cols = cols_g[1]), bold = TRUE)
+    wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = f_hdr, cols = cols_g[1]),
+                      horizontal = "center")
+    wb$add_border(sheet = hoja, dims = wb_dims(rows = f_hdr:f_fin, cols = cols_g),
+                  top_border = "medium", bottom_border = "medium",
+                  left_border = "medium", right_border = "medium",
+                  inner_hgrid = "thin", inner_vgrid = "thin")
+  }
+
+  # Formato condicional
+  dims_valores <- wb_dims(rows = f_ini:f_fin, cols = cols)
+  if (tipo == "dias") {
+    wb$add_conditional_formatting(sheet = hoja, dims = dims_valores, type = "colorScale",
+                                  style = c("#F8696B", "#FFEB84", "#63BE7B"),
+                                  rule = c(0, 183, 366))
+  } else {
+    wb$add_conditional_formatting(sheet = hoja, dims = dims_valores, type = "iconSet",
+                                  rule = c(0, 7, 12),
+                                  params = list(showValue = FALSE, iconSet = "3TrafficLights1"))
+  }
+}
+
+# Arma y escribe toda la pestaña Resumen
+escribir_resumen <- function(wb, hoja, est) {
+  n  <- length(est)
+  d  <- as.integer(mes_inicio_hidro > 1)   # desfase del año hidrologico
+  ids     <- vapply(est, function(e) e$id,     character(1))
+  nombres <- vapply(est, function(e) e$nombre, character(1))
+
+  # Años de las tablas: calendario X; hidrologico X/X+1 bajo el año en que termina
+  anios_cal <- unlist(lapply(est, function(e) e$cal$anios))
+  anios_hid <- unlist(lapply(est, function(e) e$hid$anios))
+  a_ini     <- min(anio_inicio_resumen, anios_cal)
+  cols_cal  <- a_ini:max(anios_cal)
+  cols_hid  <- (a_ini - d):max(anios_hid, a_ini - d)
+  etq_cal   <- cols_cal
+  etq_hid   <- sprintf("%d/%02d", cols_hid, (cols_hid + 1) %% 100)
+  dec_cal   <- cols_cal %/% 10 * 10
+  dec_hid   <- (cols_hid + d) %/% 10 * 10
+
+  # Disposicion
+  ncol_info <- 7
+  col_etq1  <- ncol_info + 2                               # tabla de dias
+  col_ini1  <- col_etq1 + 1
+  ancho     <- max(length(cols_cal), length(cols_hid))
+  col_etq2  <- col_ini1 + ancho + separacion_tablas        # tabla de meses
+  col_ini2  <- col_etq2 + 1
+  alto      <- n + 2
+  fila_cal  <- 1
+  fila_hid  <- fila_cal + alto + 1
+  fila_ley  <- fila_hid + alto + 1
+
+  # Tabla de estaciones
+  encabezados <- list(c("ID", 1), c("Nombre", 2), c("Código", 3), c("Altitud (m s.n.m.)", 6),
+                      c("Periodo de Registro", 7))
+  for (h in encabezados) {
+    col <- as.integer(h[2])
+    wb$add_data(sheet = hoja, x = h[1], start_col = col, start_row = 1, col_names = FALSE)
+    wb$merge_cells(sheet = hoja, dims = wb_dims(rows = 1:2, cols = col))
+  }
+  wb$add_data(sheet = hoja, x = "Coordenadas UTM", start_col = 4, start_row = 1, col_names = FALSE)
+  wb$merge_cells(sheet = hoja, dims = wb_dims(rows = 1, cols = 4:5))
+  wb$add_data(sheet = hoja, x = matrix(c("UTM NORTE (m)", "UTM ESTE (m)"), nrow = 1),
+              start_col = 4, start_row = 2, col_names = FALSE)
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 1:2, cols = 1:ncol_info),
+                    horizontal = "center", vertical = "center", wrap_text = TRUE)
+
+  columnas <- list(ids, nombres,
+                   columna_numerica(vapply(est, function(e) e$codigo, character(1))),
+                   columna_numerica(vapply(est, function(e) e$norte, character(1))),
+                   columna_numerica(vapply(est, function(e) e$este, character(1))),
+                   columna_numerica(vapply(est, function(e) e$altitud, character(1))),
+                   vapply(est, function(e) e$periodo, character(1)))
+  for (j in seq_along(columnas)) {
+    wb$add_data(sheet = hoja, x = columnas[[j]], start_col = j, start_row = 3, col_names = FALSE)
+  }
+  wb$add_cell_style(sheet = hoja, dims = wb_dims(rows = 3:(n + 2), cols = 1:ncol_info),
+                    horizontal = "center")
+  wb$set_col_widths(sheet = hoja, cols = 1:(ncol_info + 1),
+                    widths = c(6, max(12, nchar(nombres)) + 2, 12, 14, 14, 18, 20, 3))
+
+  # Tablas de dias y de meses con datos
+  wb$set_col_widths(sheet = hoja, cols = col_ini1 + 0:(ancho - 1), widths = 3.78)
+  wb$set_col_widths(sheet = hoja, cols = col_ini2 + 0:(ancho - 1), widths = 2.78)
+  wb$set_row_heights(sheet = hoja, rows = c(fila_cal, fila_hid), heights = 45)
+
+  tablas <- list(
+    list(col_etq1, col_ini1, fila_cal, "calendario", "dias",  "Días con dato\nAño calendario"),
+    list(col_etq1, col_ini1, fila_hid, "hidrologico", "dias", "Días con dato\nAño hidrológico"),
+    list(col_etq2, col_ini2, fila_cal, "calendario", "meses", "Meses con dato\nAño calendario"),
+    list(col_etq2, col_ini2, fila_hid, "hidrologico", "meses", "Meses con dato\nAño hidrológico"))
+  for (t in tablas) {
+    hid <- t[[4]] == "hidrologico"
+    escribir_tabla_resumen(
+      wb, hoja, fila = t[[3]], col_etq = t[[1]], col_ini = t[[2]], etq_filas = nombres,
+      etq_anios = if (hid) etq_hid else etq_cal,
+      decadas   = if (hid) dec_hid else dec_cal,
+      valores   = matriz_resumen(est, if (hid) "hid" else "cal", if (t[[5]] == "dias") "dias" else "meses",
+                                 if (hid) cols_hid else cols_cal),
+      titulo = t[[6]], tipo = t[[5]])
+  }
+
+  # Leyenda del semaforo
+  wb$add_data(sheet = hoja, x = c(12, 8, 5), start_col = col_ini2, start_row = fila_ley, col_names = FALSE)
+  wb$add_data(sheet = hoja, start_col = col_ini2 + 1, start_row = fila_ley, col_names = FALSE,
+              x = c(": Año completo", ": \u2265 7 meses con información",
+                    ": < 7 meses con información", ": Sin información"))
+  wb$add_conditional_formatting(sheet = hoja, dims = wb_dims(rows = fila_ley + 0:2, cols = col_ini2),
+                                type = "iconSet", rule = c(0, 7, 12),
+                                params = list(showValue = FALSE, iconSet = "3TrafficLights1"))
+}
+
+# =====================================================================
 # 10. PROCESAMIENTO DE UNA PLANILLA
 # =====================================================================
 procesar_archivo <- function(file_xlsx, codigo) {
@@ -827,6 +1043,8 @@ procesar_archivo <- function(file_xlsx, codigo) {
   df_estaciones <- wb_to_df(wb_in, sheet = "Estaciones")
 
   wb <- wb_workbook()
+  wb$add_worksheet("Resumen")   # primera pestaña; se completa al final
+  estaciones_resumen <- list()
   hojas_resumen <- character(0)  # pestañas efectivamente escritas en Resumen
 
   for (i in seq_len(nrow(df_estaciones))) {
@@ -853,6 +1071,8 @@ procesar_archivo <- function(file_xlsx, codigo) {
     res_hid <- calcular_periodo(datos$serie$FECHA, datos$serie$VALOR,
                                 mes_inicio = mes_inicio_hidro, agregacion = cfg$agregacion,
                                 hidrologico = TRUE)
+    estaciones_resumen[[length(estaciones_resumen) + 1]] <-
+      datos_resumen_estacion(hoja, nombre_estacion, datos, res_cal, res_hid)
 
     # --- Armado de tablas y disposicion ---
     tabla_orig <- armar_serie_original(datos$serie, datos$nombre_valor)
@@ -876,6 +1096,8 @@ procesar_archivo <- function(file_xlsx, codigo) {
     graficar_serie_diaria(wb, hoja, cfg, tabla_cont, pos$continua, pos$grafico_diario,
                           nombre_estacion)
   }
+
+  if (length(estaciones_resumen) > 0) escribir_resumen(wb, "Resumen", estaciones_resumen)
 
   # Sobrescribe solo el archivo de esta variable. Si esta abierto en Excel,
   # Windows no permite reemplazarlo: se avisa con un mensaje claro.
