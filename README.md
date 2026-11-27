@@ -6,7 +6,7 @@ Codigo para procesar los datos de estaciones DGA. Este codigo toma como inputs l
 Al inicio del script está el vector `variables_a_procesar`:
 
 ```r
-variables_a_procesar <- c("PP")
+variables_a_procesar <- c("PP", "TMEDIA", "TMAX", "TMIN")
 ```
 
 **En este vector deben ir siempre TODAS las variables que se quieren procesar
@@ -19,8 +19,11 @@ variables_a_procesar <- c("PP", "TMEDIA", "TMAX", "TMIN")
 Cómo funciona la carpeta `Outputs`:
 
 - La carpeta **no se borra** al ejecutar el código; se crea solo si no existe.
-- Cada variable del vector genera o **sobrescribe** su propio archivo:
-  `"PP"` → `Resumen_PP.xlsx`, `"TMEDIA"` → `Resumen_TMEDIA.xlsx`, etc.
+- Cada variable tiene su **propia subcarpeta** dentro de `Outputs` con el nombre de
+  la variable, y ahí se guardan sus dos archivos: `Outputs\PP\Resumen_PP.xlsx` y
+  `Outputs\PP\Criterios_PP.xlsx`; igual para `TMEDIA`, `TMAX` y `TMIN`.
+- Cada variable del vector genera o **sobrescribe** su `Resumen_<VARIABLE>.xlsx`.
+  (`Criterios_<VARIABLE>.xlsx` nunca se sobrescribe, ver "Planilla de criterios").
 - Los archivos de las variables que **no** están en el vector **no se tocan**:
   quedan tal como estaban de una ejecución anterior.
 
@@ -49,8 +52,9 @@ El script `Procesamiento_DGA.R` está organizado en secciones:
 2. **Configuración por variable** (`config_variables`): para cada variable se
    define cómo reconocer su planilla en `Inputs`, la columna de valores, el tipo
    de agregación (`"suma"` o `"promedio"`), la unidad y los rótulos de tablas y
-   gráficos. Para agregar una variable nueva basta con agregar un elemento a esta
-   lista.
+   gráficos, y el tipo (`grafico_tipo`: barras o líneas) y color (`color_grafico`)
+   de los gráficos. Para agregar una variable nueva basta con agregar un elemento
+   a esta lista.
 3. **Lectura**: cada planilla de `Inputs` se carga una sola vez.
 4. **Cálculo**: `calcular_periodo()` calcula todas las tablas de un periodo
    anual. Se usa dos veces por estación: año calendario (mes de inicio ENE) y año
@@ -84,14 +88,29 @@ Con la configuración actual, la disposición resultante es la misma de siempre:
 el bloque año calendario parte en la columna K, el año hidrológico en BK, la
 serie continua en DO y el gráfico diario en DW.
 
+### Gráficos por variable
+
+| Variable | Gráficos | Color |
+|---|---|---|
+| `PP` | Barras (relleno y borde) | Celeste (Light Blue) |
+| `TMAX` | Líneas | Rojo |
+| `TMIN` | Líneas | Azul |
+| `TMEDIA` | Líneas | Verde |
+
+Se aplica a los gráficos de promedio mensual, anuales y de la serie diaria. Para
+cambiarlo, editar `grafico_tipo` y `color_grafico` en `config_variables`.
+
 ### Agregación según la variable
 
 | Cálculo | `"suma"` (PP) | `"promedio"` (temperaturas) |
 |---|---|---|
-| Valor mensual a partir de los datos diarios | Suma | Promedio |
+| Valor mensual a partir de los datos diarios | Suma | Promedio (no el máximo ni mínimo del mes) |
 | Valor anual y semestral a partir de los meses | Suma | Promedio |
 | "Promedio anual" a partir de los promedios mensuales | Suma | Promedio |
 | Promedio mensual y promedio de las series anuales entre años | Promedio | Promedio |
+
+En las temperaturas, el valor anual es el promedio de los valores mensuales del año
+y el "promedio anual" es el promedio de todos los años.
 
 Los valores sin datos se escriben en Excel como `#N/A` (valor de error nativo,
 sin fórmulas).

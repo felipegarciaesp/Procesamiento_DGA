@@ -47,7 +47,7 @@ anio_inicio_resumen <- 1960
 # Inputs cuya variable este aqui; las demas se omiten.
 #
 #   - Cada variable procesada genera (o sobrescribe) su archivo en Outputs:
-#     "PP" -> Resumen_PP.xlsx, "TMEDIA" -> Resumen_TMEDIA.xlsx, etc.
+#     "PP" -> Outputs\PP\Resumen_PP.xlsx, "TMEDIA" -> Outputs\TMEDIA\Resumen_TMEDIA.xlsx, etc.
 #   - Los archivos de las variables que NO estan en el vector NO se borran ni
 #     se actualizan: quedan tal como estaban de una ejecucion anterior.
 #   - Si se cambia algo que afecta a todas las variables (por ejemplo, el año
@@ -57,7 +57,7 @@ anio_inicio_resumen <- 1960
 #
 # Codigos disponibles: los nombres de config_variables (seccion 2).
 # Ejemplo con todas las variables: c("PP", "TMEDIA", "TMAX", "TMIN")
-variables_a_procesar <- c("PP")
+variables_a_procesar <- c("PP", "TMEDIA", "TMAX", "TMIN")
 
 ## Directorio de trabajo
 #-------------------
@@ -68,7 +68,8 @@ dir_outputs <- file.path(getwd(), "Outputs")
 ## Carpeta de salida
 #-------------------
 # La carpeta Outputs NO se borra: se crea solo si no existe. Cada variable
-# procesada sobrescribe unicamente su propio archivo Resumen_<VARIABLE>.xlsx
+# tiene su propia subcarpeta (Outputs\<VARIABLE>) y sobrescribe unicamente su
+# archivo Resumen_<VARIABLE>.xlsx
 # (ver "Variables a procesar" arriba).
 if (!dir.exists(dir_outputs)) dir.create(dir_outputs, recursive = TRUE)
 
@@ -91,7 +92,9 @@ if (!dir.exists(dir_outputs)) dir.create(dir_outputs, recursive = TRUE)
 #   nombre_grafico           : nombre en el eje Y de los graficos anuales y diario
 #   grafico_promedio_mensual : rotulo del eje Y del grafico de promedios mensuales
 #   titulo_diario            : titulo del grafico de la serie diaria
-#   grafico_diario           : "barras" o "lineas"
+#   grafico_diario           : "barras" o "lineas" (tipo del grafico diario)
+#   grafico_tipo             : "barras" o "lineas" (graficos mensual y anuales)
+#   color_grafico            : color (hex) de relleno/borde de las barras o de la linea
 config_variables <- list(
 
   PP = list(patron_archivo           = "^pp|precip",
@@ -103,10 +106,12 @@ config_variables <- list(
             nombre_grafico           = "Precipitación",
             grafico_promedio_mensual = "Precipitación media",
             titulo_diario            = "Precipitaciones diarias",
-            grafico_diario           = "barras"),
+            grafico_diario           = "barras",
+            grafico_tipo             = "barras",
+            color_grafico            = "#ADD8E6"),   # celeste (Light Blue)
 
   TMEDIA = list(patron_archivo           = "tmed",
-                patron_columna           = "temp|valor",
+                patron_columna           = "^tmed|temp|valor",
                 agregacion               = "promedio",
                 unidad                   = "°C",
                 nombre_tabla             = "Temperatura media",
@@ -114,10 +119,12 @@ config_variables <- list(
                 nombre_grafico           = "Temperatura media",
                 grafico_promedio_mensual = "Temperatura media mensual",
                 titulo_diario            = "Temperatura media diaria",
-                grafico_diario           = "lineas"),
+                grafico_diario           = "lineas",
+                grafico_tipo             = "lineas",
+                color_grafico            = "#00B050"),   # verde
 
   TMAX = list(patron_archivo           = "tmax",
-              patron_columna           = "temp|valor",
+              patron_columna           = "^tmax|temp|valor",
               agregacion               = "promedio",
               unidad                   = "°C",
               nombre_tabla             = "Temperatura máxima",
@@ -125,10 +132,12 @@ config_variables <- list(
               nombre_grafico           = "Temperatura máxima",
               grafico_promedio_mensual = "Temperatura máxima media mensual",
               titulo_diario            = "Temperatura máxima diaria",
-              grafico_diario           = "lineas"),
+              grafico_diario           = "lineas",
+              grafico_tipo             = "lineas",
+              color_grafico            = "#FF0000"),   # rojo
 
   TMIN = list(patron_archivo           = "tmin",
-              patron_columna           = "temp|valor",
+              patron_columna           = "^tmin|temp|valor",
               agregacion               = "promedio",
               unidad                   = "°C",
               nombre_tabla             = "Temperatura mínima",
@@ -136,14 +145,17 @@ config_variables <- list(
               nombre_grafico           = "Temperatura mínima",
               grafico_promedio_mensual = "Temperatura mínima media mensual",
               titulo_diario            = "Temperatura mínima diaria",
-              grafico_diario           = "lineas")
+              grafico_diario           = "lineas",
+              grafico_tipo             = "lineas",
+              color_grafico            = "#0070C0")    # azul
 
   # Ejemplo para caudales (cuando exista la planilla de entrada):
   # , Q = list(patron_archivo = "^q|caudal", patron_columna = "caudal|valor",
   #            agregacion = "promedio", unidad = "m3/s",
   #            nombre_tabla = "Caudal", abrev = "Q", nombre_grafico = "Caudal",
   #            grafico_promedio_mensual = "Caudal medio mensual",
-  #            titulo_diario = "Caudales diarios", grafico_diario = "lineas")
+  #            titulo_diario = "Caudales diarios", grafico_diario = "lineas",
+  #            grafico_tipo = "lineas", color_grafico = "#7030A0")
 )
 
 # Validacion de la configuracion
@@ -623,6 +635,22 @@ formatear_grafico <- function(g, titulo, ylab, limites) {
   g
 }
 
+# Crea el grafico (barras o lineas) y le aplica el color de la variable:
+# relleno y borde en barras, trazo sin marcadores en lineas
+crear_grafico <- function(datos, x, y, tipo, color) {
+  if (tipo == "barras") {
+    g <- ms_barchart(data = datos, x = x, y = y)
+    g <- chart_data_fill(g, values = setNames(color, y))
+    g <- chart_data_stroke(g, values = setNames(color, y))
+  } else {
+    g <- ms_linechart(data = datos, x = x, y = y)
+    g <- chart_data_stroke(g, values = setNames(color, y))
+    g <- chart_data_line_width(g, values = setNames(1.5, y))
+    g <- chart_data_symbol(g, values = setNames("none", y))
+  }
+  g
+}
+
 # Filas que ocupa el grafico numero "i" de la columna de graficos (1, 2, 3...)
 filas_grafico <- function(i) {
   fila_ini <- 2 + (i - 1) * (alto_grafico + separacion_graficos)
@@ -642,7 +670,8 @@ graficar_periodo <- function(wb, hoja, res, tablas, cfg, pos, nombre_estacion) {
   fila_fin <- 2 + nrow(tablas$promedio)
   datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 2:fila_fin, cols = pos$promedio + 0:1))
   datos$MES <- as.character(datos$MES)
-  g <- ms_barchart(data = datos, x = "MES", y = names(tablas$promedio)[2])
+  names(datos) <- c("MES", names(tablas$promedio)[2])   # evita diferencias de codificacion en "°C"
+  g <- crear_grafico(datos, "MES", names(datos)[2], cfg$grafico_tipo, cfg$color_grafico)
   g <- formatear_grafico(g, nombre_estacion,
                          paste0(cfg$grafico_promedio_mensual, " (", u, ")"),
                          limites_eje(res$prom_mensual))
@@ -658,7 +687,7 @@ graficar_periodo <- function(wb, hoja, res, tablas, cfg, pos, nombre_estacion) {
     nombre_y <- names(tablas$anual)[j + 1]
     names(datos) <- c("YEAR", nombre_y)
     datos$YEAR <- as.character(datos$YEAR)            # años como categorias (no 1, 2, 3...)
-    g <- ms_barchart(data = datos, x = "YEAR", y = nombre_y)
+    g <- crear_grafico(datos, "YEAR", nombre_y, cfg$grafico_tipo, cfg$color_grafico)
     g <- formatear_grafico(g, nombre_estacion,
                            paste0(cfg$nombre_grafico, " ", res$nombres_series[j], " (", u, ")"),
                            limites_anual)
@@ -679,11 +708,9 @@ graficar_serie_diaria <- function(wb, hoja, cfg, tabla, col_serie, col_grafico, 
   datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 1:fila_fin, cols = col_serie:col_valor))
   datos <- datos[, c(1, ncol(datos))]
 
+  g <- crear_grafico(datos, "FECHA", nombre_y, cfg$grafico_diario, cfg$color_grafico)
   if (cfg$grafico_diario == "barras") {
-    g <- ms_barchart(data = datos, x = "FECHA", y = nombre_y)
     g <- chart_settings(g, grouping = "clustered", dir = "vertical", gap_width = 0)
-  } else {
-    g <- ms_linechart(data = datos, x = "FECHA", y = nombre_y)
   }
   g <- formatear_grafico(g, paste0(cfg$titulo_diario, " - ", nombre_estacion),
                          paste0(cfg$nombre_grafico, " diaria (", cfg$unidad, ")"),
@@ -759,7 +786,7 @@ graficar_serie_diaria <- function(wb, hoja, cfg, tabla, col_serie, col_grafico, 
 crear_criterios <- function(codigo, hojas) {
 
   archivo <- paste0("Criterios_", codigo, ".xlsx")
-  ruta    <- file.path(dir_outputs, archivo)
+  ruta    <- file.path(dir_outputs, codigo, archivo)
 
   if (file.exists(ruta)) {
     message("Se mantiene ", archivo, " existente (no se sobrescribe).")
@@ -1055,6 +1082,9 @@ procesar_archivo <- function(file_xlsx, codigo) {
   hojas         <- unname(wb_get_sheet_names(wb_in))
   df_estaciones <- wb_to_df(wb_in, sheet = "Estaciones")
 
+  dir_variable <- file.path(dir_outputs, codigo)
+  if (!dir.exists(dir_variable)) dir.create(dir_variable, recursive = TRUE)
+
   wb <- wb_workbook()
   wb$add_worksheet("Resumen")   # primera pestaña; se completa al final
   estaciones_resumen <- list()
@@ -1115,7 +1145,7 @@ procesar_archivo <- function(file_xlsx, codigo) {
   # Sobrescribe solo el archivo de esta variable. Si esta abierto en Excel,
   # Windows no permite reemplazarlo: se avisa con un mensaje claro.
   archivo_salida <- paste0("Resumen_", codigo, ".xlsx")
-  ruta_salida    <- file.path(dir_outputs, archivo_salida)
+  ruta_salida    <- file.path(dir_variable, archivo_salida)
   tryCatch(
     wb$save(ruta_salida, overwrite = TRUE),
     error = function(e) {
