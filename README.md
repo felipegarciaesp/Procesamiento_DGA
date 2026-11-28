@@ -93,11 +93,11 @@ serie continua en DO y el gráfico diario en DW.
 | Variable | Gráficos | Color |
 |---|---|---|
 | `PP` | Barras (relleno y borde) | Celeste (Light Blue) |
-| `TMAX` | Líneas | Rojo |
-| `TMIN` | Líneas | Azul |
-| `TMEDIA` | Líneas | Verde |
+| `TMAX` | Líneas con marcadores (mensual y anual); línea simple (diario) | Rojo |
+| `TMIN` | Líneas con marcadores (mensual y anual); línea simple (diario) | Azul |
+| `TMEDIA` | Líneas con marcadores (mensual y anual); línea simple (diario) | Verde |
 
-Se aplica a los gráficos de promedio mensual, anuales y de la serie diaria. En los gráficos de líneas, cada `#N/A` se muestra como un salto (sin línea que una los puntos vecinos): el código activa en cada gráfico la opción de Excel "Mostrar #N/A como celda vacía", disponible en Excel 365 y 2019 en adelante. En versiones antiguas de Excel o en LibreOffice se unirían los puntos. Para
+Los marcadores tienen el mismo color de relleno y borde que la línea. Se aplica a los gráficos de promedio mensual, anuales y de la serie diaria. En los gráficos de líneas, cada `#N/A` se muestra como un salto (sin línea que una los puntos vecinos): el código activa en cada gráfico la opción de Excel "Mostrar #N/A como celda vacía", disponible en Excel 365 y 2019 en adelante. En versiones antiguas de Excel o en LibreOffice se unirían los puntos. Para
 cambiarlo, editar `grafico_tipo` y `color_grafico` en `config_variables`.
 
 ### Agregación según la variable
@@ -136,9 +136,11 @@ vuelve a leer ninguna pestaña). De izquierda a derecha:
 Notas:
 - Los años parten en `anio_inicio_resumen` (por defecto 1960, sección 1 del código);
   si alguna estación tiene datos anteriores, la tabla se extiende hacia atrás.
-- El último año es el último con datos entre todas las estaciones. En año hidrológico
-  cada columna se ubica bajo el año en que termina (1959/60 bajo 1960), y el último es
-  el último año hidrológico con datos (por ejemplo 2025/26 si los datos terminan en feb-2026).
+- El último año de las tablas lo define `anio_fin_resumen` (sección 1 del código, inicialmente **2026**).
+  Solo fija hasta qué año se arman estas tablas; **no filtra datos**. Debe actualizarse a mano
+  (2027, 2028…) cuando se agreguen datos más recientes. Si alguna estación tiene datos posteriores,
+  la tabla se extiende sola. En año hidrológico cada columna se ubica bajo el año en que termina
+  (1959/60 bajo 1960); con 2026 el último es 2026/27.
 - Las tablas se ubican automáticamente según la cantidad de estaciones y años.
 
 ## Planilla de criterios

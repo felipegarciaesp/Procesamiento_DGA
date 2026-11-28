@@ -40,6 +40,15 @@ if (mes_fin_hidro != ((mes_inicio_hidro + 10) %% 12) + 1) {
 # de los datos de todas las estaciones.
 anio_inicio_resumen <- 1960
 
+# Año final de las tablas de la pestaña Resumen (dias y meses con dato por año).
+# SOLO define hasta donde llegan esas tablas; no filtra ni modifica los datos.
+# Las columnas llegan hasta este año aunque ninguna estacion tenga datos tan
+# recientes (quedan vacias o en 0). En año hidrologico la ultima columna es
+# anio_fin_resumen/anio_fin_resumen+1 (ej.: 2026 -> 2026/27).
+# IMPORTANTE: cambiarlo a 2027, 2028, etc. cuando se actualicen los datos.
+# Si alguna estacion tiene datos posteriores, la tabla se extiende sola.
+anio_fin_resumen <- 2026
+
 ## Variables a procesar
 #-------------------
 # IMPORTANTE: en este vector deben ir SIEMPRE TODAS las variables que se
@@ -637,7 +646,7 @@ formatear_grafico <- function(g, titulo, ylab, limites) {
 
 # Crea el grafico (barras o lineas) y le aplica el color de la variable:
 # relleno y borde en barras, trazo sin marcadores en lineas
-crear_grafico <- function(datos, x, y, tipo, color) {
+crear_grafico <- function(datos, x, y, tipo, color, marcadores = FALSE) {
   if (tipo == "barras") {
     g <- ms_barchart(data = datos, x = x, y = y)
     g <- chart_data_fill(g, values = setNames(color, y))
@@ -646,7 +655,14 @@ crear_grafico <- function(datos, x, y, tipo, color) {
     g <- ms_linechart(data = datos, x = x, y = y)
     g <- chart_data_stroke(g, values = setNames(color, y))
     g <- chart_data_line_width(g, values = setNames(1.5, y))
-    g <- chart_data_symbol(g, values = setNames("none", y))
+    if (marcadores) {
+      # Line with Markers: marcador con relleno y borde del color de la linea
+      g <- chart_data_symbol(g, values = setNames("circle", y))
+      g <- chart_data_size(g, values = setNames(5, y))
+      g <- chart_data_fill(g, values = setNames(color, y))
+    } else {
+      g <- chart_data_symbol(g, values = setNames("none", y))
+    }
   }
   g
 }
@@ -687,7 +703,8 @@ graficar_periodo <- function(wb, hoja, res, tablas, cfg, pos, nombre_estacion) {
   datos <- wb_data(wb, sheet = hoja, dims = wb_dims(rows = 2:fila_fin, cols = pos$promedio + 0:1))
   datos$MES <- as.character(datos$MES)
   names(datos) <- c("MES", names(tablas$promedio)[2])   # evita diferencias de codificacion en "°C"
-  g <- crear_grafico(datos, "MES", names(datos)[2], cfg$grafico_tipo, cfg$color_grafico)
+  g <- crear_grafico(datos, "MES", names(datos)[2], cfg$grafico_tipo, cfg$color_grafico,
+                     marcadores = TRUE)
   g <- formatear_grafico(g, nombre_estacion,
                          paste0(cfg$grafico_promedio_mensual, " (", u, ")"),
                          limites_eje(res$prom_mensual))
@@ -703,7 +720,8 @@ graficar_periodo <- function(wb, hoja, res, tablas, cfg, pos, nombre_estacion) {
     nombre_y <- names(tablas$anual)[j + 1]
     names(datos) <- c("YEAR", nombre_y)
     datos$YEAR <- as.character(datos$YEAR)            # años como categorias (no 1, 2, 3...)
-    g <- crear_grafico(datos, "YEAR", nombre_y, cfg$grafico_tipo, cfg$color_grafico)
+    g <- crear_grafico(datos, "YEAR", nombre_y, cfg$grafico_tipo, cfg$color_grafico,
+                       marcadores = TRUE)
     g <- formatear_grafico(g, nombre_estacion,
                            paste0(cfg$nombre_grafico, " ", res$nombres_series[j], " (", u, ")"),
                            limites_anual)
@@ -1007,8 +1025,9 @@ escribir_resumen <- function(wb, hoja, est) {
   anios_cal <- unlist(lapply(est, function(e) e$cal$anios))
   anios_hid <- unlist(lapply(est, function(e) e$hid$anios))
   a_ini     <- min(anio_inicio_resumen, anios_cal)
-  cols_cal  <- a_ini:max(anios_cal)
-  cols_hid  <- (a_ini - d):max(anios_hid, a_ini - d)
+  a_fin     <- max(anio_fin_resumen, anios_cal)
+  cols_cal  <- a_ini:a_fin
+  cols_hid  <- (a_ini - d):max(anio_fin_resumen, anios_hid, a_ini - d)
   etq_cal   <- cols_cal
   etq_hid   <- sprintf("%d/%02d", cols_hid, (cols_hid + 1) %% 100)
   dec_cal   <- cols_cal %/% 10 * 10
