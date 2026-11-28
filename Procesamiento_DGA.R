@@ -651,6 +651,22 @@ crear_grafico <- function(datos, x, y, tipo, color) {
   g
 }
 
+# Excel 365 (y 2019+): en los graficos de linea muestra cada #N/A como celda
+# vacia, es decir, como un salto en la linea en vez de unir los puntos vecinos.
+# mschart no expone esta opcion, por lo que se agrega al XML de cada grafico de
+# linea justo antes de guardar. En versiones antiguas de Excel se ignora.
+na_como_vacio_en_lineas <- function(wb) {
+  ext <- paste0(
+    '<c:extLst><c:ext uri="{56B9EC1D-385E-4148-901F-78D8002777C0}" ',
+    'xmlns:c16r3="http://schemas.microsoft.com/office/drawing/2017/03/chart">',
+    '<c16r3:dataDisplayOptions16><c16r3:dispNaAsBlank val="1"/>',
+    '</c16r3:dataDisplayOptions16></c:ext></c:extLst>')
+  es_linea <- grepl("<c:lineChart>", wb$charts$chart, fixed = TRUE)
+  wb$charts$chart[es_linea] <- sub("</c:chart>", paste0(ext, "</c:chart>"),
+                                   wb$charts$chart[es_linea], fixed = TRUE)
+  invisible(wb)
+}
+
 # Filas que ocupa el grafico numero "i" de la columna de graficos (1, 2, 3...)
 filas_grafico <- function(i) {
   fila_ini <- 2 + (i - 1) * (alto_grafico + separacion_graficos)
@@ -1141,6 +1157,8 @@ procesar_archivo <- function(file_xlsx, codigo) {
   }
 
   if (length(estaciones_resumen) > 0) escribir_resumen(wb, "Resumen", estaciones_resumen)
+
+  na_como_vacio_en_lineas(wb)
 
   # Sobrescribe solo el archivo de esta variable. Si esta abierto en Excel,
   # Windows no permite reemplazarlo: se avisa con un mensaje claro.

@@ -97,7 +97,7 @@ serie continua en DO y el gráfico diario en DW.
 | `TMIN` | Líneas | Azul |
 | `TMEDIA` | Líneas | Verde |
 
-Se aplica a los gráficos de promedio mensual, anuales y de la serie diaria. Para
+Se aplica a los gráficos de promedio mensual, anuales y de la serie diaria. En los gráficos de líneas, cada `#N/A` se muestra como un salto (sin línea que una los puntos vecinos): el código activa en cada gráfico la opción de Excel "Mostrar #N/A como celda vacía", disponible en Excel 365 y 2019 en adelante. En versiones antiguas de Excel o en LibreOffice se unirían los puntos. Para
 cambiarlo, editar `grafico_tipo` y `color_grafico` en `config_variables`.
 
 ### Agregación según la variable
